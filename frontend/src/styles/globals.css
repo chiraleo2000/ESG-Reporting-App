@@ -1,0 +1,372 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base Styles */
+@layer base {
+  :root {
+    /* Microsoft Cloud for Sustainability Colors */
+    --color-azure-primary: #0078D4;
+    --color-sustain-primary: #107C10;
+    --color-eco-primary: #00A36C;
+    --color-grass-primary: #22c55e;
+    --color-grass-light: #f0fdf4;
+    --color-grass-dark: #166534;
+    --sidebar-width: 280px;
+    --header-height: 64px;
+  }
+
+  * {
+    @apply border-earth-200;
+  }
+
+  body {
+    @apply bg-earth-50 text-earth-800 font-sans antialiased;
+  }
+
+  .dark body {
+    @apply bg-earth-900 text-earth-100;
+  }
+
+  /* Scrollbar Styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-earth-100 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-earth-300 rounded-full hover:bg-earth-400 transition-colors;
+  }
+
+  .dark ::-webkit-scrollbar-track {
+    @apply bg-earth-800;
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    @apply bg-earth-600 hover:bg-earth-500;
+  }
+}
+
+/* Component Styles */
+@layer components {
+  /* Cards */
+  .card {
+    @apply bg-white rounded-2xl shadow-card border border-earth-200 
+           transition-all duration-300 hover:shadow-card-hover;
+  }
+
+  .dark .card {
+    @apply bg-earth-800 border-earth-700;
+  }
+
+  .card-grass {
+    @apply card bg-gradient-to-br from-blue-50 to-white 
+           border-blue-200 hover:border-blue-300;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 
+           rounded-xl font-medium text-sm transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-[#0078D4] text-white hover:bg-[#106EBE] 
+           focus:ring-[#0078D4] shadow-lg active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply btn bg-blue-100 text-blue-700 hover:bg-blue-200 
+           focus:ring-blue-400;
+  }
+
+  .btn-outline {
+    @apply btn border-2 border-blue-500 text-blue-600 
+           hover:bg-blue-50 focus:ring-blue-400;
+  }
+
+  .btn-ghost {
+    @apply btn text-earth-600 hover:bg-earth-100 
+           hover:text-earth-800 focus:ring-earth-400;
+  }
+
+  .btn-icon {
+    @apply p-2.5 rounded-xl hover:bg-blue-100 
+           text-earth-500 hover:text-blue-600 transition-colors;
+  }
+
+  .dark .btn-ghost {
+    @apply text-earth-300 hover:bg-earth-700 hover:text-earth-100;
+  }
+
+  /* Inputs */
+  .input {
+    @apply w-full px-4 py-3 rounded-xl border border-earth-200 
+           bg-white text-earth-800 placeholder-earth-400
+           focus:outline-none focus:ring-2 focus:ring-[#0078D4] 
+           focus:border-transparent transition-all duration-200;
+  }
+
+  .dark .input {
+    @apply bg-earth-800 border-earth-600 text-earth-100 
+           placeholder-earth-500 focus:ring-[#0078D4];
+  }
+
+  .input-grass {
+    @apply input border-blue-200 focus:ring-blue-400 
+           bg-blue-50/50 focus:bg-white;
+  }
+
+  /* Select */
+  .select {
+    @apply input appearance-none cursor-pointer 
+           bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2024%2024%22%20stroke%3D%22%2378716c%22%3E%3Cpath%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%222%22%20d%3D%22M19%209l-7%207-7-7%22%2F%3E%3C%2Fsvg%3E')]
+           bg-[length:20px] bg-[right_12px_center] bg-no-repeat pr-10;
+  }
+
+  /* Labels */
+  .label {
+    @apply block text-sm font-medium text-earth-700 mb-1.5;
+  }
+
+  .dark .label {
+    @apply text-earth-300;
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full 
+           text-xs font-medium;
+  }
+
+  .badge-grass {
+    @apply badge bg-blue-100 text-blue-700;
+  }
+
+  .badge-success {
+    @apply badge bg-success-50 text-success-600;
+  }
+
+  .badge-warning {
+    @apply badge bg-warning-50 text-warning-600;
+  }
+
+  .badge-error {
+    @apply badge bg-error-50 text-error-600;
+  }
+
+  .badge-info {
+    @apply badge bg-info-50 text-info-600;
+  }
+
+  /* Sidebar Navigation */
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl 
+           text-earth-600 font-medium transition-all duration-200
+           hover:bg-grass-100 hover:text-grass-700;
+  }
+
+  .nav-item.active {
+    @apply bg-grass-500 text-white shadow-grass hover:bg-grass-600;
+  }
+
+  .dark .nav-item {
+    @apply text-earth-400 hover:bg-earth-700 hover:text-earth-100;
+  }
+
+  .dark .nav-item.active {
+    @apply bg-grass-600 text-white;
+  }
+
+  /* Tables */
+  .table-container {
+    @apply overflow-x-auto rounded-xl border border-grass-100;
+  }
+
+  .table {
+    @apply w-full text-sm;
+  }
+
+  .table th {
+    @apply px-4 py-3 text-left font-semibold text-earth-700 
+           bg-grass-50 border-b border-grass-100;
+  }
+
+  .table td {
+    @apply px-4 py-3 border-b border-grass-50;
+  }
+
+  .table tr:hover td {
+    @apply bg-grass-50/50;
+  }
+
+  .dark .table th {
+    @apply bg-earth-800 text-earth-300 border-earth-700;
+  }
+
+  .dark .table td {
+    @apply border-earth-700;
+  }
+
+  /* Stat Cards */
+  .stat-card {
+    @apply card p-6 flex flex-col gap-2;
+  }
+
+  .stat-value {
+    @apply text-3xl font-bold text-earth-800;
+  }
+
+  .stat-label {
+    @apply text-sm text-earth-500;
+  }
+
+  .stat-trend {
+    @apply flex items-center gap-1 text-sm font-medium;
+  }
+
+  .stat-trend.up {
+    @apply text-success-600;
+  }
+
+  .stat-trend.down {
+    @apply text-error-600;
+  }
+
+  /* Tooltips */
+  .tooltip {
+    @apply absolute z-50 px-3 py-2 text-xs font-medium text-white 
+           bg-earth-800 rounded-lg shadow-lg opacity-0 invisible
+           transition-all duration-200;
+  }
+
+  .tooltip.show {
+    @apply opacity-100 visible;
+  }
+
+  /* Dropdown Menu */
+  .dropdown {
+    @apply absolute z-50 mt-2 py-2 bg-white rounded-xl shadow-lg 
+           border border-grass-100 min-w-[200px];
+  }
+
+  .dropdown-item {
+    @apply flex items-center gap-3 px-4 py-2.5 text-sm text-earth-600
+           hover:bg-grass-50 hover:text-grass-700 cursor-pointer
+           transition-colors;
+  }
+
+  .dark .dropdown {
+    @apply bg-earth-800 border-earth-700;
+  }
+
+  .dark .dropdown-item {
+    @apply text-earth-300 hover:bg-earth-700 hover:text-earth-100;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    @apply fixed inset-0 z-50 bg-black/50 backdrop-blur-sm 
+           flex items-center justify-center p-4;
+  }
+
+  .modal {
+    @apply bg-white rounded-2xl shadow-xl max-w-lg w-full 
+           max-h-[90vh] overflow-y-auto;
+  }
+
+  .dark .modal {
+    @apply bg-earth-800;
+  }
+
+  /* Progress Bar */
+  .progress {
+    @apply h-2 bg-grass-100 rounded-full overflow-hidden;
+  }
+
+  .progress-bar {
+    @apply h-full bg-grass-500 rounded-full transition-all duration-500;
+  }
+
+  /* Tabs */
+  .tabs {
+    @apply flex gap-1 p-1 bg-grass-100 rounded-xl;
+  }
+
+  .tab {
+    @apply px-4 py-2 rounded-lg text-sm font-medium text-earth-600
+           transition-all duration-200 hover:text-grass-700;
+  }
+
+  .tab.active {
+    @apply bg-white text-grass-700 shadow-sm;
+  }
+
+  .dark .tabs {
+    @apply bg-earth-700;
+  }
+
+  .dark .tab.active {
+    @apply bg-earth-600 text-earth-100;
+  }
+
+  /* Avatar */
+  .avatar {
+    @apply w-10 h-10 rounded-full bg-grass-200 flex items-center 
+           justify-center text-grass-700 font-semibold;
+  }
+
+  .avatar-lg {
+    @apply w-14 h-14 text-lg;
+  }
+
+  .avatar-sm {
+    @apply w-8 h-8 text-sm;
+  }
+
+  /* Page Transitions */
+  .page-enter {
+    @apply animate-fade-in;
+  }
+
+  .page-content {
+    @apply animate-slide-up;
+  }
+
+  /* Glass Effect */
+  .glass {
+    @apply bg-white/80 backdrop-blur-xl border border-white/20;
+  }
+
+  .dark .glass {
+    @apply bg-earth-800/80 border-earth-700/20;
+  }
+
+  /* Gradient Text */
+  .text-gradient {
+    @apply bg-gradient-to-r from-grass-600 to-meadow-600 
+           bg-clip-text text-transparent;
+  }
+}
+
+/* Utility Classes */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}

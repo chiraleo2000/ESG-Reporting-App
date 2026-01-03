@@ -1,0 +1,46 @@
+# Development Docker Compose - Database Only
+# Use this for local development with the backend running natively
+# Run: docker-compose -f docker-compose.dev.yml up -d
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database with pgvector for AI/ML embeddings
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: esg-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      POSTGRES_DB: esg_reporting
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d esg_reporting"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache (Optional for development)
+  redis:
+    image: redis:7-alpine
+    container_name: esg-redis-dev
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:

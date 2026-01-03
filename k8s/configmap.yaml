@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: esg-config
+  namespace: esg-reporting
+data:
+  NODE_ENV: "production"
+  DATABASE_HOST: "postgres"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "esg_reporting"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  JWT_EXPIRES_IN: "24h"
+  CORS_ORIGIN: "http://localhost:2048"

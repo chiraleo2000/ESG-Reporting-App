@@ -1,0 +1,121 @@
+# =============================================================================
+# ESG Reporting App - Docker Compose
+# =============================================================================
+# UI:  http://localhost:2048
+# API: http://localhost:2047
+# =============================================================================
+
+services:
+  # PostgreSQL Database with pgvector
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: esg-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      POSTGRES_DB: esg_reporting
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d esg_reporting"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - esg-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: esg-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - esg-network
+
+  # Backend API - Port 2047
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: esg-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 2047
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://postgres:postgres123@postgres:5432/esg_reporting
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: esg_reporting
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres123
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: esg_jwt_secret_production_change_this
+      JWT_EXPIRES_IN: 24h
+      CORS_ORIGIN: http://localhost:2048
+    ports:
+      - "2047:2047"
+    volumes:
+      - upload_data:/app/uploads
+      - logs_data:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2047/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - esg-network
+
+  # Frontend UI - Port 2048
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        VITE_API_URL: /api/v1
+    container_name: esg-frontend
+    restart: unless-stopped
+    ports:
+      - "2048:2048"
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:2048/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - esg-network
+
+networks:
+  esg-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  upload_data:
+  logs_data:

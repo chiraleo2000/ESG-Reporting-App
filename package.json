@@ -1,32 +1,15 @@
 {
   "name": "esg-reporting-app",
-  "version": "1.0.0",
-  "description": "ESG Carbon Accounting & Reporting Tool supporting 6 regulatory standards (EU CBAM, UK CBAM, China Carbon Market, Japan MAFF, Korea K-ESG, Thailand Thai-ESG)",
+  "version": "2.0.0",
+  "description": "ESG Carbon Accounting & Reporting Platform - GHG Protocol compliant emissions tracking with EU CBAM, Thai ESG, K-ESG support",
   "private": true,
-  "workspaces": [
-    "frontend",
-    "backend"
-  ],
   "scripts": {
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:frontend": "npm -w frontend run dev",
-    "dev:backend": "npm -w backend run dev",
-    "build": "npm run build:frontend && npm run build:backend",
-    "build:frontend": "npm -w frontend run build",
-    "build:backend": "npm -w backend run build",
-    "start": "npm -w backend run start",
-    "test": "npm run test:backend && npm run test:frontend",
-    "test:backend": "npm -w backend run test",
-    "test:frontend": "npm -w frontend run test",
-    "lint": "npm run lint:backend && npm run lint:frontend",
-    "lint:backend": "npm -w backend run lint",
-    "lint:frontend": "npm -w frontend run lint",
-    "docker:build": "docker-compose -f docker/docker-compose.yml build",
-    "docker:up": "docker-compose -f docker/docker-compose.yml up -d",
-    "docker:down": "docker-compose -f docker/docker-compose.yml down",
-    "docker:logs": "docker-compose -f docker/docker-compose.yml logs -f",
-    "db:migrate": "npm -w backend run migrate",
-    "db:seed": "npm -w backend run seed"
+    "docker:up": "docker compose up -d",
+    "docker:up:build": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:seed": "docker compose exec backend node dist/db/seed.js",
+    "dev:db": "docker compose up -d postgres redis"
   },
   "keywords": [
     "esg",
@@ -34,20 +17,14 @@
     "ghg-emissions",
     "cbam",
     "sustainability",
-    "reporting",
+    "ghg-protocol",
     "scope-1",
     "scope-2",
-    "scope-3",
-    "cfp",
-    "cfo"
+    "scope-3"
   ],
-  "author": "",
+  "author": "chiraleo2000",
   "license": "MIT",
-  "devDependencies": {
-    "concurrently": "^8.2.2"
-  },
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=9.0.0"
+    "node": ">=18.0.0"
   }
 }

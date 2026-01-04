@@ -1,92 +1,41 @@
 # Dependencies
 node_modules/
-.pnp
-.pnp.js
+package-lock.json
 
 # Build outputs
 dist/
 build/
-*.tsbuildinfo
 
-# Environment files
+# Environment files (keep examples)
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*.local
 !.env.example
 
 # Logs
-logs/
+logs/*
+!logs/.gitkeep
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 
-# Uploads (development)
-uploads/*
-!uploads/.gitkeep
+# Uploads & Reports (runtime data)
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/reports/*
+!backend/reports/.gitkeep
 
 # IDE
 .idea/
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
+.vscode/
 *.swp
 *.swo
-*~
 
 # OS
 .DS_Store
 Thumbs.db
-*.dll
-*.exe
 
 # Testing
 coverage/
-.nyc_output/
-*.lcov
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-*.temp
 
 # Cache
 .cache/
-.parcel-cache/
-.eslintcache
-.npm/
-
-# Docker
-.docker/
-
-# Database
-*.sqlite
-*.sqlite3
-*.db
-
-# Secrets (never commit)
-*.pem
-*.key
-*.crt
-*.p12
-secrets/
-
-# Reports generated locally
-reports/*.pdf
-reports/*.xlsx
-!reports/.gitkeep
-
-# TypeScript
 *.tsbuildinfo
-
-# Misc
-*.bak
-*.backup
-.history/

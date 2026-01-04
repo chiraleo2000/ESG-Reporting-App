@@ -169,7 +169,7 @@ How can I help you today?`,
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev: Message[]) => [...prev, userMessage]);
     setInputValue('');
     setIsTyping(true);
 
@@ -195,7 +195,7 @@ How can I help you today?`,
         timestamp: new Date(),
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
+      setMessages((prev: Message[]) => [...prev, assistantMessage]);
       setIsTyping(false);
     }, 1500);
   };

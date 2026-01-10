@@ -41,6 +41,61 @@ redis.on('close', () => {
 });
 
 // Redis helper functions
+// Cache key generators
+export const cacheKeys = {
+  emissionFactor: (material: string, category: string, tier?: string, region?: string) =>
+    `ef:${material}:${category}:${tier || 'default'}:${region || 'global'}`,
+  gridEF: (country: string, year: number) => `grid:${country}:${year}`,
+  serpapi: (query: string) => `serpapi:${Buffer.from(query).toString('base64')}`,
+  calculation: (projectId: string, type: string) => `calc:${projectId}:${type}`,
+  report: (reportId: string) => `report:${reportId}`,
+  project: (projectId: string) => `project:${projectId}`,
+  userProjects: (userId: string) => `user:${userId}:projects`,
+  projectActivities: (projectId: string) => `project:${projectId}:activities`,
+  tokenBlacklist: (token: string) => `blacklist:${token}`,
+};
+
+// Redis wrapper with keys
+export const redisClient = {
+  client: redis,
+  keys: cacheKeys,
+  async get<T = any>(key: string): Promise<T | null> {
+    try {
+      const value = await redis.get(key);
+      return value ? JSON.parse(value) : null;
+    } catch (error) {
+      logger.error('Redis get error:', { key, error });
+      return null;
+    }
+  },
+  async set(key: string, value: any, ttlSeconds?: number): Promise<void> {
+    try {
+      const serialized = JSON.stringify(value);
+      if (ttlSeconds) {
+        await redis.setex(key, ttlSeconds, serialized);
+      } else {
+        await redis.setex(key, config.redis.ttlSeconds, serialized);
+      }
+    } catch (error) {
+      logger.error('Redis set error:', { key, error });
+    }
+  },
+  async del(key: string): Promise<void> {
+    try {
+      await redis.del(key);
+    } catch (error) {
+      logger.error('Redis del error:', { key, error });
+    }
+  },
+  async setex(key: string, seconds: number, value: string): Promise<void> {
+    try {
+      await redis.setex(key, seconds, value);
+    } catch (error) {
+      logger.error('Redis setex error:', { key, error });
+    }
+  },
+};
+
 export const cache = {
   /**
    * Get a value from cache
@@ -143,14 +198,16 @@ export const cache = {
   },
 
   // Cache key generators
-  keys: {
-    emissionFactor: (material: string, category: string, tier?: string, region?: string) =>
-      `ef:${material}:${category}:${tier || 'default'}:${region || 'global'}`,
-    gridEF: (country: string, year: number) => `grid:${country}:${year}`,
-    serpapi: (query: string) => `serpapi:${Buffer.from(query).toString('base64')}`,
-    calculation: (projectId: string, type: string) => `calc:${projectId}:${type}`,
-    report: (reportId: string) => `report:${reportId}`,
-  },
+  keys: cacheKeys,
 };
 
+// Re-export the redisClient wrapper as default export
+export { redisClient as redisWrapper };
 export default cache;
+
+// Named exports for direct cache functions (backwards compatibility)
+export const cacheGet = cache.get.bind(cache);
+export const cacheSet = cache.set.bind(cache);
+export const cacheDel = cache.del.bind(cache);
+export const cacheExists = cache.exists.bind(cache);
+export const cacheDelPattern = cache.delPattern.bind(cache);

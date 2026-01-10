@@ -144,7 +144,7 @@ export async function validateReportData(
     case 'uk_cbam':
       validateUKCBAM(data, result);
       break;
-    case 'china_carbon':
+    case 'china_carbon_market':
       validateChinaCarbon(data, result);
       break;
     case 'k_esg':
@@ -242,7 +242,7 @@ export async function getStandardRequirements(standard: ReportStandard): Promise
       optionalFields: ['standardSpecific.overseasCarbonPrice', 'standardSpecific.verification'],
       sections: ['organization', 'goods', 'emissions', 'verification'],
     },
-    china_carbon: {
+    china_carbon_market: {
       requiredFields: [
         ...commonRequired,
         'standardSpecific.enterpriseName',
@@ -335,7 +335,7 @@ async function getStandardSpecificData(
       return getEUCBAMData(projectId, baseData, options);
     case 'uk_cbam':
       return getUKCBAMData(projectId, baseData, options);
-    case 'china_carbon':
+    case 'china_carbon_market':
       return getChinaCarbonData(projectId, baseData, options);
     case 'k_esg':
       return getKESGData(projectId, baseData, options);
@@ -657,7 +657,7 @@ function getStandardName(standard: ReportStandard): string {
   const names: Record<ReportStandard, string> = {
     eu_cbam: 'EU CBAM',
     uk_cbam: 'UK CBAM',
-    china_carbon: 'China Carbon Market',
+    china_carbon_market: 'China Carbon Market',
     k_esg: 'Korea K-ESG',
     maff_esg: 'Japan MAFF ESG',
     thai_esg: 'Thailand Thai-ESG',

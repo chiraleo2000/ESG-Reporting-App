@@ -551,3 +551,236 @@ function parseActivityRow(row: any, rowNumber: number): any {
     dataQualityScore: row['Data Quality Score'] || row['data_quality_score'] || row['dataQualityScore'] || null,
   };
 }
+
+/**
+ * Get files for a project (alias for getFiles for route compatibility)
+ */
+export async function getProjectFiles(req: Request, res: Response): Promise<void> {
+  const { projectId } = req.params;
+
+  const result = await db.query(
+    `SELECT f.*, u.name as uploaded_by_name
+     FROM files f
+     LEFT JOIN users u ON f.uploaded_by = u.id
+     WHERE f.project_id = $1
+     ORDER BY f.created_at DESC`,
+    [projectId]
+  );
+
+  res.json({
+    success: true,
+    data: result.rows.map((row) => ({
+      id: row.id,
+      originalName: row.original_name,
+      storedName: row.stored_name,
+      mimeType: row.mime_type,
+      size: row.size,
+      uploadedBy: row.uploaded_by_name,
+      parseStatus: row.parse_status,
+      parseError: row.parse_error,
+      createdAt: row.created_at,
+    })),
+  });
+}
+
+/**
+ * Get single file info
+ */
+export async function getFile(req: Request, res: Response): Promise<void> {
+  const { id } = req.params;
+
+  const result = await db.query(
+    `SELECT f.*, u.name as uploaded_by_name, p.name as project_name
+     FROM files f
+     LEFT JOIN users u ON f.uploaded_by = u.id
+     LEFT JOIN projects p ON f.project_id = p.id
+     WHERE f.id = $1`,
+    [id]
+  );
+
+  if (result.rows.length === 0) {
+    throw new NotFoundError('File not found');
+  }
+
+  const row = result.rows[0];
+
+  res.json({
+    success: true,
+    data: {
+      id: row.id,
+      projectId: row.project_id,
+      projectName: row.project_name,
+      originalName: row.original_name,
+      storedName: row.stored_name,
+      mimeType: row.mime_type,
+      size: row.size,
+      uploadedBy: row.uploaded_by_name,
+      parseStatus: row.parse_status,
+      parseError: row.parse_error,
+      parsedData: row.parsed_data,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    },
+  });
+}
+
+/**
+ * Download file template
+ */
+export async function downloadTemplate(req: Request, res: Response): Promise<void> {
+  const { format } = req.params;
+
+  const validFormats = ['xlsx', 'csv', 'json'];
+  if (!validFormats.includes(format.toLowerCase())) {
+    throw new BadRequestError(`Invalid format. Supported formats: ${validFormats.join(', ')}`);
+  }
+
+  // Create template based on format
+  if (format.toLowerCase() === 'xlsx') {
+    // Use existing getActivityTemplate logic
+    const templateData = [
+      {
+        Name: 'Example: Natural Gas Combustion',
+        Description: 'On-site natural gas boiler',
+        Scope: 'scope1',
+        'Scope 3 Category': '',
+        'Activity Type': 'stationary_combustion',
+        Quantity: 1000,
+        Unit: 'm3',
+        Source: 'Utility bills',
+        'Tier Level': 'tier1',
+        'Tier Direction': 'both',
+        'Data Source': 'invoice',
+        'Data Quality Score': 'high',
+      },
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Activities Template');
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="activity_template.xlsx"`);
+    res.send(buffer);
+  } else if (format.toLowerCase() === 'csv') {
+    const csvContent = `Name,Description,Scope,Scope 3 Category,Activity Type,Quantity,Unit,Source,Tier Level,Tier Direction,Data Source,Data Quality Score
+"Example: Natural Gas Combustion","On-site natural gas boiler",scope1,,stationary_combustion,1000,m3,"Utility bills",tier1,both,invoice,high
+"Example: Grid Electricity","Purchased electricity",scope2,,purchased_electricity,50000,kWh,"Electricity provider",tier1,both,invoice,high`;
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="activity_template.csv"`);
+    res.send(csvContent);
+  } else {
+    const jsonTemplate = {
+      activities: [
+        {
+          name: 'Example: Natural Gas Combustion',
+          description: 'On-site natural gas boiler',
+          scope: 'scope1',
+          scope3Category: null,
+          activityType: 'stationary_combustion',
+          quantity: 1000,
+          unit: 'm3',
+          source: 'Utility bills',
+          tierLevel: 'tier1',
+          tierDirection: 'both',
+          dataSource: 'invoice',
+          dataQualityScore: 'high',
+        },
+      ],
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="activity_template.json"`);
+    res.json(jsonTemplate);
+  }
+}
+
+/**
+ * Re-parse file (if parsing failed initially)
+ */
+export async function reparseFile(req: Request, res: Response): Promise<void> {
+  const { id } = req.params;
+  const userId = req.user!.id;
+
+  // Get file info
+  const fileResult = await db.query(
+    `SELECT * FROM files WHERE id = $1`,
+    [id]
+  );
+
+  if (fileResult.rows.length === 0) {
+    throw new NotFoundError('File not found');
+  }
+
+  const file = fileResult.rows[0];
+  const filePath = path.join(UPLOAD_DIR, file.project_id, file.stored_name);
+
+  if (!fs.existsSync(filePath)) {
+    throw new NotFoundError('File not found on disk');
+  }
+
+  try {
+    // Attempt to parse the file based on type
+    const ext = path.extname(file.original_name).toLowerCase();
+    let parsedData: any = null;
+
+    if (ext === '.xlsx' || ext === '.xls') {
+      const workbook = XLSX.readFile(filePath);
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      parsedData = XLSX.utils.sheet_to_json(worksheet);
+    } else if (ext === '.csv') {
+      const workbook = XLSX.readFile(filePath, { type: 'file' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      parsedData = XLSX.utils.sheet_to_json(worksheet);
+    } else if (ext === '.json') {
+      const content = fs.readFileSync(filePath, 'utf8');
+      parsedData = JSON.parse(content);
+    }
+
+    // Update file record with parsed data
+    await db.query(
+      `UPDATE files SET 
+         parse_status = 'success',
+         parsed_data = $1,
+         parse_error = NULL,
+         updated_at = NOW()
+       WHERE id = $2`,
+      [JSON.stringify(parsedData), id]
+    );
+
+    await logAudit(userId, 'REPARSE', 'file', id, { status: 'success' }, file.project_id);
+
+    res.json({
+      success: true,
+      message: 'File re-parsed successfully',
+      data: {
+        id: file.id,
+        parseStatus: 'success',
+        rowCount: Array.isArray(parsedData) ? parsedData.length : 1,
+      },
+    });
+  } catch (error: any) {
+    // Update file record with error
+    await db.query(
+      `UPDATE files SET 
+         parse_status = 'error',
+         parse_error = $1,
+         updated_at = NOW()
+       WHERE id = $2`,
+      [error.message, id]
+    );
+
+    await logAudit(userId, 'REPARSE', 'file', id, { status: 'error', error: error.message }, file.project_id);
+
+    res.status(400).json({
+      success: false,
+      error: 'Failed to parse file',
+      message: error.message,
+    });
+  }
+}

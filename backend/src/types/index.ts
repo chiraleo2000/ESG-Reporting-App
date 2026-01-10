@@ -21,12 +21,65 @@ export interface User {
 
 export type UserRole = 'owner' | 'director' | 'auditor' | 'editor' | 'viewer';
 
+// JWT token payload - minimal data for authentication
 export interface AuthPayload {
+  id: string;      // alias for userId (for convenience)
   userId: string;
   email: string;
+  name: string;    // user's name
   role: UserRole;
   signatureAuthorized: boolean;
 }
+
+// Extended user info returned from authentication (not in JWT)
+export interface AuthUser extends AuthPayload {
+  company: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Audit action type
+export type AuditAction = 
+  | 'CREATE' 
+  | 'UPDATE' 
+  | 'DELETE' 
+  | 'VIEW' 
+  | 'CALCULATE' 
+  | 'GENERATE' 
+  | 'SIGN' 
+  | 'VERIFY' 
+  | 'EXPORT' 
+  | 'IMPORT'
+  | 'BULK_CREATE'
+  | 'BULK_DELETE'
+  | 'BULK_CALCULATE'
+  | 'BULK_IMPORT'
+  | 'CALCULATE_CFP'
+  | 'CALCULATE_CFO'
+  | 'UPLOAD'
+  | 'ADD_MEMBER'
+  | 'UPDATE_MEMBER'
+  | 'REMOVE_MEMBER'
+  | 'CLONE'
+  | 'GENERATE_REPORT'
+  | 'BATCH_GENERATE_REPORT'
+  | 'UPDATE_REPORT_STATUS'
+  | 'REGENERATE_REPORT'
+  | 'SIGN_REPORT'
+  | 'REVOKE_SIGNATURE'
+  | 'REPARSE'
+  | 'LOGIN'
+  | 'LOGOUT';
+
+// Tier level and direction for activities
+export type TierLevel = 'tier1' | 'tier2' | 'tier3';
+export type TierDirection = 'upstream' | 'downstream' | 'both';
+
+// Project status type
+export type ProjectStatus = 'active' | 'archived' | 'draft';
+
+// Report status type
+export type ReportStatus = 'generating' | 'completed' | 'failed' | 'signed';
 
 // ============================================================================
 // PROJECT TYPES
@@ -58,12 +111,12 @@ export type CompanySize = 'small' | 'medium' | 'large' | 'enterprise';
 // ============================================================================
 
 export type ReportStandard = 
-  | 'EU_CBAM'
-  | 'UK_CBAM'
-  | 'CHINA_CARBON'
-  | 'JAPAN_MAFF'
-  | 'KOREA_KESG'
-  | 'THAILAND_ESG';
+  | 'eu_cbam'
+  | 'uk_cbam'
+  | 'china_carbon_market'
+  | 'k_esg'
+  | 'maff_esg'
+  | 'thai_esg';
 
 export interface StandardConfig {
   id: ReportStandard;

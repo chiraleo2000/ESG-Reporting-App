@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
+import { redisClient as redis } from '../config/redis';
 import { generateId, roundTo } from '../utils/helpers';
 import { BadRequestError, NotFoundError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
@@ -557,5 +558,270 @@ export async function getReportRequirements(req: Request, res: Response): Promis
   res.json({
     success: true,
     data: requirements,
+  });
+}
+
+/**
+ * Batch generate reports (alias for generateBatchReports for route compatibility)
+ */
+export async function batchGenerateReports(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  const { projectId, standards, format, options } = req.body;
+
+  if (!projectId) {
+    throw new BadRequestError('Project ID is required');
+  }
+
+  if (!standards || !Array.isArray(standards) || standards.length === 0) {
+    throw new BadRequestError('Standards array is required');
+  }
+
+  // Create batch record
+  const batchId = generateId();
+  const batchStatus = {
+    id: batchId,
+    projectId,
+    standards,
+    format: format || 'pdf',
+    status: 'processing',
+    progress: 0,
+    totalReports: standards.length,
+    generatedReports: 0,
+    errors: [] as any[],
+    createdAt: new Date().toISOString(),
+  };
+
+  // Store batch status in Redis for tracking
+  await redis.set(`batch:${batchId}`, JSON.stringify(batchStatus), 3600); // 1 hour expiry
+
+  // Get project
+  const projectResult = await db.query(
+    `SELECT * FROM projects WHERE id = $1`,
+    [projectId]
+  );
+
+  if (projectResult.rows.length === 0) {
+    throw new NotFoundError('Project not found');
+  }
+
+  const project = projectResult.rows[0];
+  const validStandards = standards.filter((s: string) => project.reporting_standards.includes(s));
+
+  const results = {
+    generated: [] as any[],
+    errors: [] as any[],
+  };
+
+  // Generate each report
+  for (let i = 0; i < validStandards.length; i++) {
+    const standard = validStandards[i];
+    try {
+      const reportId = generateId();
+      const reportData = await reportService.generateReportData(projectId, standard, options);
+      const validation = await reportService.validateReportData(reportData, standard);
+      const files = await reportService.generateReportFiles(reportData, format || 'pdf', standard);
+
+      await db.query(
+        `INSERT INTO reports (
+          id, project_id, standard, format, status, report_data, file_path,
+          validation_warnings, validation_errors, generated_by, batch_id
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [
+          reportId, projectId, standard, format || 'pdf',
+          validation.errors.length > 0 ? 'draft' : 'generated',
+          JSON.stringify(reportData), files.filePath,
+          JSON.stringify(validation.warnings), JSON.stringify(validation.errors),
+          userId, batchId
+        ]
+      );
+
+      results.generated.push({ id: reportId, standard });
+
+      // Update batch progress
+      batchStatus.generatedReports = i + 1;
+      batchStatus.progress = Math.round(((i + 1) / standards.length) * 100);
+      await redis.set(`batch:${batchId}`, JSON.stringify(batchStatus), 3600);
+    } catch (error: any) {
+      results.errors.push({ standard, error: error.message });
+      batchStatus.errors.push({ standard, error: error.message });
+    }
+  }
+
+  // Finalize batch status
+  batchStatus.status = results.errors.length === 0 ? 'completed' : 'completed_with_errors';
+  batchStatus.progress = 100;
+  await redis.set(`batch:${batchId}`, JSON.stringify(batchStatus), 3600);
+
+  await logAudit(userId, 'BATCH_GENERATE_REPORT', 'report', batchId, {
+    standards: validStandards,
+    generated: results.generated.length,
+    errors: results.errors.length,
+  }, projectId);
+
+  res.status(201).json({
+    success: true,
+    data: {
+      batchId,
+      ...results,
+      summary: {
+        requested: standards.length,
+        generated: results.generated.length,
+        failed: results.errors.length,
+      },
+    },
+  });
+}
+
+/**
+ * Get batch status
+ */
+export async function getBatchStatus(req: Request, res: Response): Promise<void> {
+  const { batchId } = req.params;
+
+  const cached = await redis.get(`batch:${batchId}`);
+
+  if (!cached) {
+    // Try to get from database
+    const result = await db.query(
+      `SELECT batch_id, COUNT(*) as total, 
+              SUM(CASE WHEN status != 'error' THEN 1 ELSE 0 END) as completed
+       FROM reports WHERE batch_id = $1 GROUP BY batch_id`,
+      [batchId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new NotFoundError('Batch not found');
+    }
+
+    const row = result.rows[0];
+    res.json({
+      success: true,
+      data: {
+        batchId,
+        status: 'completed',
+        progress: 100,
+        totalReports: parseInt(row.total),
+        generatedReports: parseInt(row.completed),
+      },
+    });
+    return;
+  }
+
+  const batchStatus = JSON.parse(cached);
+
+  res.json({
+    success: true,
+    data: batchStatus,
+  });
+}
+
+/**
+ * Get batch manifest (list of reports in batch)
+ */
+export async function getBatchManifest(req: Request, res: Response): Promise<void> {
+  const { batchId } = req.params;
+
+  const result = await db.query(
+    `SELECT r.id, r.standard, r.format, r.status, r.file_path, r.created_at,
+            r.validation_warnings, r.validation_errors, p.name as project_name
+     FROM reports r
+     JOIN projects p ON r.project_id = p.id
+     WHERE r.batch_id = $1
+     ORDER BY r.created_at`,
+    [batchId]
+  );
+
+  if (result.rows.length === 0) {
+    throw new NotFoundError('Batch not found or no reports generated');
+  }
+
+  res.json({
+    success: true,
+    data: {
+      batchId,
+      projectName: result.rows[0].project_name,
+      reports: result.rows.map((row) => ({
+        id: row.id,
+        standard: row.standard,
+        format: row.format,
+        status: row.status,
+        filePath: row.file_path,
+        hasWarnings: row.validation_warnings?.length > 0,
+        hasErrors: row.validation_errors?.length > 0,
+        createdAt: row.created_at,
+      })),
+      summary: {
+        total: result.rows.length,
+        generated: result.rows.filter((r) => r.status === 'generated').length,
+        draft: result.rows.filter((r) => r.status === 'draft').length,
+        signed: result.rows.filter((r) => r.status === 'signed').length,
+      },
+    },
+  });
+}
+
+/**
+ * Get reports for a project (alias for getReports for route compatibility)
+ */
+export async function getProjectReports(req: Request, res: Response): Promise<void> {
+  const { projectId } = req.params;
+  const { standard, status, page = 1, limit = 20 } = req.query;
+  const offset = (Number(page) - 1) * Number(limit);
+
+  let whereClause = 'WHERE project_id = $1';
+  const params: any[] = [projectId];
+  let paramIndex = 2;
+
+  if (standard) {
+    whereClause += ` AND standard = $${paramIndex}`;
+    params.push(standard);
+    paramIndex++;
+  }
+
+  if (status) {
+    whereClause += ` AND status = $${paramIndex}`;
+    params.push(status);
+    paramIndex++;
+  }
+
+  const countResult = await db.query(
+    `SELECT COUNT(*) FROM reports ${whereClause}`,
+    params
+  );
+  const total = parseInt(countResult.rows[0].count);
+
+  params.push(Number(limit), offset);
+  const result = await db.query(
+    `SELECT r.*, u.name as generated_by_name
+     FROM reports r
+     LEFT JOIN users u ON r.generated_by = u.id
+     ${whereClause}
+     ORDER BY r.created_at DESC
+     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+    params
+  );
+
+  res.json({
+    success: true,
+    data: result.rows.map((row) => ({
+      id: row.id,
+      standard: row.standard,
+      format: row.format,
+      status: row.status,
+      validationWarnings: row.validation_warnings,
+      validationErrors: row.validation_errors,
+      generatedBy: row.generated_by_name,
+      signedAt: row.signed_at,
+      signedBy: row.signed_by,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    })),
+    pagination: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+    },
   });
 }

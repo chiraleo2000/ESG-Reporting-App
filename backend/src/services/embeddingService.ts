@@ -124,11 +124,11 @@ export class EmbeddingService {
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json() as { error?: { message?: string } };
       throw new Error(`OpenAI API error: ${error.error?.message || 'Unknown error'}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { data: Array<{ embedding: number[] }> };
     return data.data[0].embedding;
   }
 
@@ -154,11 +154,11 @@ export class EmbeddingService {
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json() as { error?: { message?: string } };
       throw new Error(`Azure OpenAI API error: ${error.error?.message || 'Unknown error'}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { data: Array<{ embedding: number[] }> };
     return data.data[0].embedding;
   }
 

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
-import { redis } from '../config/redis';
-import { env } from '../config/env';
+import { redisClient as redis } from '../config/redis';
+import { config } from '../config/env';
 import { generateId, roundTo } from '../utils/helpers';
 import { BadRequestError, NotFoundError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
@@ -82,7 +82,7 @@ export async function calculateActivity(req: Request, res: Response): Promise<vo
   // Apply tier multiplier if Tier 2+
   const tier = tierLevel || activity.tier_level;
   if (tier === 'tier2plus') {
-    totalEmissions *= env.TIER2_PLUS_MULTIPLIER;
+    totalEmissions *= config.tier2PlusMultiplier;
   }
 
   // Calculate precursors if requested
@@ -167,7 +167,7 @@ export async function calculateAllActivities(req: Request, res: Response): Promi
 
       // Apply tier multiplier
       if (activity.tier_level === 'tier2plus') {
-        totalEmissions *= env.TIER2_PLUS_MULTIPLIER;
+        totalEmissions *= config.tier2PlusMultiplier;
       }
 
       // Calculate precursors
@@ -565,6 +565,511 @@ export async function getCFOResults(req: Request, res: Response): Promise<void> 
       createdAt: row.created_at,
     })),
   });
+}
+
+/**
+ * Get project emission totals
+ */
+export async function getProjectTotals(req: Request, res: Response): Promise<void> {
+  const { projectId } = req.params;
+
+  // Get all calculated activities grouped by scope
+  const result = await db.query(
+    `SELECT 
+       scope,
+       scope3_category,
+       COUNT(*) as activity_count,
+       SUM(total_emissions_kg_co2e) as total_emissions
+     FROM activities
+     WHERE project_id = $1 AND calculation_status = 'calculated'
+     GROUP BY scope, scope3_category
+     ORDER BY scope, scope3_category`,
+    [projectId]
+  );
+
+  // Calculate totals
+  const totals = {
+    scope1: 0,
+    scope2: 0,
+    scope3: 0,
+    scope3Categories: {} as Record<string, number>,
+    total: 0,
+    activityCount: 0,
+  };
+
+  for (const row of result.rows) {
+    const emissions = parseFloat(row.total_emissions) || 0;
+    const count = parseInt(row.activity_count) || 0;
+    totals.activityCount += count;
+
+    switch (row.scope) {
+      case 'scope1':
+        totals.scope1 += emissions;
+        break;
+      case 'scope2':
+        totals.scope2 += emissions;
+        break;
+      case 'scope3':
+        totals.scope3 += emissions;
+        if (row.scope3_category) {
+          totals.scope3Categories[row.scope3_category] = 
+            (totals.scope3Categories[row.scope3_category] || 0) + emissions;
+        }
+        break;
+    }
+  }
+
+  totals.total = totals.scope1 + totals.scope2 + totals.scope3;
+
+  // Get pending activities count
+  const pendingResult = await db.query(
+    `SELECT COUNT(*) as pending FROM activities 
+     WHERE project_id = $1 AND calculation_status = 'pending'`,
+    [projectId]
+  );
+
+  res.json({
+    success: true,
+    data: {
+      scope1: roundTo(totals.scope1, 4),
+      scope2: roundTo(totals.scope2, 4),
+      scope3: roundTo(totals.scope3, 4),
+      scope3Categories: Object.fromEntries(
+        Object.entries(totals.scope3Categories).map(([k, v]) => [k, roundTo(v as number, 4)])
+      ),
+      total: roundTo(totals.total, 4),
+      totalTonnesCO2e: roundTo(totals.total / 1000, 2),
+      activityCount: totals.activityCount,
+      pendingActivities: parseInt(pendingResult.rows[0].pending) || 0,
+    },
+  });
+}
+
+/**
+ * Calculate both CFP and CFO
+ */
+export async function calculateBoth(req: Request, res: Response): Promise<void> {
+  const { projectId } = req.params;
+  const userId = req.user!.id;
+  const { 
+    productName, 
+    functionalUnit, 
+    productionVolume, 
+    allocationMethod, 
+    includeBiogenic,
+    organizationName,
+    consolidationMethod,
+    operationalBoundary,
+    reportingYear 
+  } = req.body;
+
+  // Get all calculated activities
+  const activitiesResult = await db.query(
+    `SELECT * FROM activities 
+     WHERE project_id = $1 AND calculation_status = 'calculated'
+     ORDER BY scope`,
+    [projectId]
+  );
+
+  if (activitiesResult.rows.length === 0) {
+    throw new BadRequestError('No calculated activities found. Please calculate activities first.');
+  }
+
+  // Calculate CFP
+  const cfpId = generateId();
+  const lifecycleStages = {
+    rawMaterials: 0,
+    production: 0,
+    distribution: 0,
+    use: 0,
+    endOfLife: 0,
+  };
+
+  // Calculate CFO
+  const cfoId = generateId();
+  const scopeEmissions = {
+    scope1: 0,
+    scope2Location: 0,
+    scope2Market: 0,
+    scope3Upstream: 0,
+    scope3Downstream: 0,
+  };
+  const scope3CategoryBreakdown: Record<string, number> = {};
+
+  for (const activity of activitiesResult.rows) {
+    const emissions = parseFloat(activity.total_emissions_kg_co2e) || 0;
+
+    // CFP mapping
+    if (activity.scope === 'scope1' || activity.scope === 'scope2') {
+      lifecycleStages.production += emissions;
+    } else if (activity.scope === 'scope3') {
+      switch (activity.scope3_category) {
+        case 'purchased_goods':
+        case 'capital_goods':
+        case 'fuel_energy':
+          lifecycleStages.rawMaterials += emissions;
+          break;
+        case 'upstream_transport':
+        case 'downstream_transport':
+          lifecycleStages.distribution += emissions;
+          break;
+        case 'waste':
+        case 'end_of_life':
+          lifecycleStages.endOfLife += emissions;
+          break;
+        case 'use_of_products':
+        case 'processing':
+          lifecycleStages.use += emissions;
+          break;
+        default:
+          lifecycleStages.production += emissions;
+      }
+    }
+
+    // CFO mapping
+    switch (activity.scope) {
+      case 'scope1':
+        scopeEmissions.scope1 += emissions;
+        break;
+      case 'scope2':
+        scopeEmissions.scope2Location += emissions;
+        break;
+      case 'scope3':
+        const category = activity.scope3_category || 'other';
+        scope3CategoryBreakdown[category] = (scope3CategoryBreakdown[category] || 0) + emissions;
+        const upstreamCategories = ['purchased_goods', 'capital_goods', 'fuel_energy', 'upstream_transport', 'waste', 'business_travel', 'employee_commuting', 'upstream_leased'];
+        if (upstreamCategories.includes(category)) {
+          scopeEmissions.scope3Upstream += emissions;
+        } else {
+          scopeEmissions.scope3Downstream += emissions;
+        }
+        break;
+    }
+  }
+
+  const cfpTotal = Object.values(lifecycleStages).reduce((sum, val) => sum + val, 0);
+  const cfpPerUnit = productionVolume > 0 ? cfpTotal / productionVolume : cfpTotal;
+  const cfoTotal = scopeEmissions.scope1 + scopeEmissions.scope2Location + scopeEmissions.scope3Upstream + scopeEmissions.scope3Downstream;
+
+  // Save CFP result
+  await db.query(
+    `INSERT INTO cfp_results (
+      id, project_id, product_name, functional_unit, production_volume,
+      allocation_method, raw_materials_emissions, production_emissions,
+      distribution_emissions, use_emissions, end_of_life_emissions,
+      cfp_total, cfp_per_unit, biogenic_carbon
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+    [
+      cfpId, projectId, productName || 'Product', functionalUnit || 'unit', productionVolume || 1,
+      allocationMethod || 'mass', roundTo(lifecycleStages.rawMaterials, 4),
+      roundTo(lifecycleStages.production, 4), roundTo(lifecycleStages.distribution, 4),
+      roundTo(lifecycleStages.use, 4), roundTo(lifecycleStages.endOfLife, 4),
+      roundTo(cfpTotal, 4), roundTo(cfpPerUnit, 6), 0
+    ]
+  );
+
+  // Save CFO result
+  await db.query(
+    `INSERT INTO cfo_results (
+      id, project_id, organization_name, reporting_year, consolidation_method,
+      operational_boundary, scope1_emissions, scope2_location_emissions,
+      scope2_market_emissions, scope3_upstream_emissions, scope3_downstream_emissions,
+      scope3_category_breakdown, cfo_total
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+    [
+      cfoId, projectId, organizationName || 'Organization', reportingYear || new Date().getFullYear(),
+      consolidationMethod || 'operational_control', operationalBoundary || 'all',
+      roundTo(scopeEmissions.scope1, 4), roundTo(scopeEmissions.scope2Location, 4),
+      roundTo(scopeEmissions.scope2Market, 4), roundTo(scopeEmissions.scope3Upstream, 4),
+      roundTo(scopeEmissions.scope3Downstream, 4), JSON.stringify(scope3CategoryBreakdown),
+      roundTo(cfoTotal, 4)
+    ]
+  );
+
+  await logAudit(userId, 'CALCULATE_CFP', 'cfp', cfpId, { cfpTotal }, projectId);
+  await logAudit(userId, 'CALCULATE_CFO', 'cfo', cfoId, { cfoTotal }, projectId);
+
+  res.json({
+    success: true,
+    data: {
+      cfp: {
+        id: cfpId,
+        cfpTotal: roundTo(cfpTotal, 4),
+        cfpPerUnit: roundTo(cfpPerUnit, 6),
+        lifecycleStages: Object.fromEntries(
+          Object.entries(lifecycleStages).map(([k, v]) => [k, roundTo(v, 4)])
+        ),
+      },
+      cfo: {
+        id: cfoId,
+        cfoTotal: roundTo(cfoTotal, 4),
+        emissions: {
+          scope1: roundTo(scopeEmissions.scope1, 4),
+          scope2: roundTo(scopeEmissions.scope2Location, 4),
+          scope3: roundTo(scopeEmissions.scope3Upstream + scopeEmissions.scope3Downstream, 4),
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Calculate precursor emissions for CBAM
+ */
+export async function calculatePrecursors(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  const { materials, productionRoutes, quantities } = req.body;
+
+  if (!Array.isArray(materials) || materials.length === 0) {
+    throw new BadRequestError('Materials array is required');
+  }
+
+  const results: any[] = [];
+  let totalPrecursorEmissions = 0;
+
+  for (let i = 0; i < materials.length; i++) {
+    const material = materials[i];
+    const route = productionRoutes?.[i] || 'default';
+    const quantity = quantities?.[i] || 1;
+
+    // Look up precursor factor
+    const factorResult = await db.query(
+      `SELECT * FROM precursor_factors 
+       WHERE material_type ILIKE $1 AND production_route ILIKE $2
+       LIMIT 1`,
+      [`%${material}%`, `%${route}%`]
+    );
+
+    let factor = 0;
+    let source = 'default';
+
+    if (factorResult.rows.length > 0) {
+      factor = parseFloat(factorResult.rows[0].factor_kg_co2_per_kg);
+      source = factorResult.rows[0].source;
+    } else {
+      // Use default factor if not found
+      factor = 2.0; // Default kg CO2 per kg
+      source = 'default_estimate';
+    }
+
+    const emissions = quantity * factor;
+    totalPrecursorEmissions += emissions;
+
+    results.push({
+      material,
+      productionRoute: route,
+      quantity,
+      factor,
+      source,
+      emissions: roundTo(emissions, 4),
+    });
+  }
+
+  res.json({
+    success: true,
+    data: {
+      precursors: results,
+      totalEmissions: roundTo(totalPrecursorEmissions, 4),
+    },
+  });
+}
+
+/**
+ * Get emissions hot spots analysis
+ */
+export async function getHotSpots(req: Request, res: Response): Promise<void> {
+  const { projectId } = req.params;
+
+  // Get activities sorted by emissions
+  const result = await db.query(
+    `SELECT 
+       id, name, scope, scope3_category, activity_type,
+       total_emissions_kg_co2e,
+       quantity, unit
+     FROM activities
+     WHERE project_id = $1 AND calculation_status = 'calculated'
+     ORDER BY total_emissions_kg_co2e DESC
+     LIMIT 20`,
+    [projectId]
+  );
+
+  // Get total emissions for percentage calculation
+  const totalResult = await db.query(
+    `SELECT SUM(total_emissions_kg_co2e) as total
+     FROM activities
+     WHERE project_id = $1 AND calculation_status = 'calculated'`,
+    [projectId]
+  );
+
+  const totalEmissions = parseFloat(totalResult.rows[0]?.total) || 0;
+
+  // Get emissions by scope
+  const scopeResult = await db.query(
+    `SELECT scope, SUM(total_emissions_kg_co2e) as total
+     FROM activities
+     WHERE project_id = $1 AND calculation_status = 'calculated'
+     GROUP BY scope
+     ORDER BY total DESC`,
+    [projectId]
+  );
+
+  // Get emissions by activity type
+  const activityTypeResult = await db.query(
+    `SELECT activity_type, SUM(total_emissions_kg_co2e) as total
+     FROM activities
+     WHERE project_id = $1 AND calculation_status = 'calculated'
+     GROUP BY activity_type
+     ORDER BY total DESC
+     LIMIT 10`,
+    [projectId]
+  );
+
+  const hotSpots = result.rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    scope: row.scope,
+    scope3Category: row.scope3_category,
+    activityType: row.activity_type,
+    emissions: parseFloat(row.total_emissions_kg_co2e),
+    percentage: totalEmissions > 0 ? roundTo((parseFloat(row.total_emissions_kg_co2e) / totalEmissions) * 100, 2) : 0,
+    quantity: parseFloat(row.quantity),
+    unit: row.unit,
+  }));
+
+  res.json({
+    success: true,
+    data: {
+      hotSpots,
+      byScope: scopeResult.rows.map((row) => ({
+        scope: row.scope,
+        emissions: parseFloat(row.total),
+        percentage: totalEmissions > 0 ? roundTo((parseFloat(row.total) / totalEmissions) * 100, 2) : 0,
+      })),
+      byActivityType: activityTypeResult.rows.map((row) => ({
+        activityType: row.activity_type,
+        emissions: parseFloat(row.total),
+        percentage: totalEmissions > 0 ? roundTo((parseFloat(row.total) / totalEmissions) * 100, 2) : 0,
+      })),
+      totalEmissions: roundTo(totalEmissions, 4),
+    },
+  });
+}
+
+/**
+ * Get data quality assessment for a project
+ */
+export async function getDataQuality(req: Request, res: Response): Promise<void> {
+  const { projectId } = req.params;
+
+  // Get activities with their data quality scores
+  const result = await db.query(
+    `SELECT 
+       scope,
+       data_quality_score,
+       data_source,
+       tier_level,
+       COUNT(*) as count,
+       SUM(total_emissions_kg_co2e) as total_emissions
+     FROM activities
+     WHERE project_id = $1 AND calculation_status = 'calculated'
+     GROUP BY scope, data_quality_score, data_source, tier_level`,
+    [projectId]
+  );
+
+  // Calculate overall quality score
+  const qualityScores: Record<string, number> = {
+    high: 1.0,
+    medium: 0.7,
+    low: 0.4,
+    unknown: 0.3,
+  };
+
+  let totalWeightedScore = 0;
+  let totalEmissions = 0;
+
+  const breakdown = {
+    byQuality: {} as Record<string, { count: number; emissions: number }>,
+    byDataSource: {} as Record<string, { count: number; emissions: number }>,
+    byTierLevel: {} as Record<string, { count: number; emissions: number }>,
+    byScope: {} as Record<string, { count: number; emissions: number; avgQuality: number }>,
+  };
+
+  for (const row of result.rows) {
+    const quality = row.data_quality_score || 'unknown';
+    const emissions = parseFloat(row.total_emissions) || 0;
+    const count = parseInt(row.count);
+
+    totalWeightedScore += (qualityScores[quality] || 0.3) * emissions;
+    totalEmissions += emissions;
+
+    // By quality
+    if (!breakdown.byQuality[quality]) {
+      breakdown.byQuality[quality] = { count: 0, emissions: 0 };
+    }
+    breakdown.byQuality[quality].count += count;
+    breakdown.byQuality[quality].emissions += emissions;
+
+    // By data source
+    const source = row.data_source || 'unknown';
+    if (!breakdown.byDataSource[source]) {
+      breakdown.byDataSource[source] = { count: 0, emissions: 0 };
+    }
+    breakdown.byDataSource[source].count += count;
+    breakdown.byDataSource[source].emissions += emissions;
+
+    // By tier level
+    const tier = row.tier_level || 'tier1';
+    if (!breakdown.byTierLevel[tier]) {
+      breakdown.byTierLevel[tier] = { count: 0, emissions: 0 };
+    }
+    breakdown.byTierLevel[tier].count += count;
+    breakdown.byTierLevel[tier].emissions += emissions;
+
+    // By scope
+    if (!breakdown.byScope[row.scope]) {
+      breakdown.byScope[row.scope] = { count: 0, emissions: 0, avgQuality: 0 };
+    }
+    breakdown.byScope[row.scope].count += count;
+    breakdown.byScope[row.scope].emissions += emissions;
+  }
+
+  const overallScore = totalEmissions > 0 ? roundTo(totalWeightedScore / totalEmissions, 2) : 0;
+
+  // Determine quality rating
+  let qualityRating: string;
+  if (overallScore >= 0.9) qualityRating = 'excellent';
+  else if (overallScore >= 0.7) qualityRating = 'good';
+  else if (overallScore >= 0.5) qualityRating = 'moderate';
+  else qualityRating = 'needs_improvement';
+
+  res.json({
+    success: true,
+    data: {
+      overallScore,
+      qualityRating,
+      breakdown,
+      recommendations: getQualityRecommendations(breakdown),
+    },
+  });
+}
+
+// Helper function for quality recommendations
+function getQualityRecommendations(breakdown: any): string[] {
+  const recommendations: string[] = [];
+
+  if (breakdown.byQuality['low']?.emissions > 0) {
+    recommendations.push('Consider improving data quality for low-quality activities');
+  }
+  if (breakdown.byDataSource['estimate']?.emissions > 0) {
+    recommendations.push('Replace estimated data with measured or invoiced data where possible');
+  }
+  if (breakdown.byTierLevel['tier1']?.count > (breakdown.byTierLevel['tier2']?.count || 0)) {
+    recommendations.push('Consider using Tier 2+ calculations for more accurate results');
+  }
+
+  return recommendations;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
-import { redis } from '../config/redis';
+import { redisClient as redis } from '../config/redis';
 import { generateId, roundTo } from '../utils/helpers';
 import { BadRequestError, NotFoundError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
@@ -42,11 +42,12 @@ export async function searchEmissionFactors(req: Request, res: Response): Promis
   const cached = await redis.get(cacheKey);
 
   if (cached) {
-    return res.json({
+    res.json({
       success: true,
       data: JSON.parse(cached),
       cached: true,
     });
+    return;
   }
 
   // Search using SERPAPI
@@ -578,5 +579,380 @@ export async function bulkImportEmissionFactors(req: Request, res: Response): Pr
   res.status(201).json({
     success: true,
     data: results,
+  });
+}
+
+/**
+ * Lookup emission factor via SERPAPI
+ */
+export async function serpAPILookup(req: Request, res: Response): Promise<void> {
+  const { query, activityType, region, unit } = req.body;
+
+  if (!query && !activityType) {
+    throw new BadRequestError('Query or activity type is required');
+  }
+
+  const searchQuery = query || activityType;
+  
+  // Check cache first
+  const cacheKey = `serpapi:${searchQuery}:${region || 'global'}:${unit || 'any'}`;
+  const cached = await redis.get(cacheKey);
+
+  if (cached) {
+    res.json({
+      success: true,
+      data: JSON.parse(cached),
+      cached: true,
+    });
+    return;
+  }
+
+  // Search using SERPAPI
+  const results = await serpAPIService.searchEmissionFactors(
+    searchQuery,
+    unit as string,
+    region as string,
+    undefined
+  );
+
+  // Cache results for 24 hours
+  await redis.set(cacheKey, JSON.stringify(results), 86400);
+
+  res.json({
+    success: true,
+    data: results,
+    cached: false,
+  });
+}
+
+/**
+ * Get grid emission factor for a country and year
+ */
+export async function getGridEF(req: Request, res: Response): Promise<void> {
+  const { country, year } = req.params;
+
+  const result = await db.query(
+    `SELECT * FROM grid_emission_factors 
+     WHERE (country ILIKE $1 OR region ILIKE $1) AND year = $2
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [`%${country}%`, parseInt(year)]
+  );
+
+  if (result.rows.length === 0) {
+    throw new NotFoundError(`Grid emission factor not found for ${country} in ${year}`);
+  }
+
+  const row = result.rows[0];
+
+  res.json({
+    success: true,
+    data: {
+      id: row.id,
+      country: row.country,
+      region: row.region,
+      gridName: row.grid_name,
+      year: row.year,
+      factorKgCo2PerKwh: parseFloat(row.factor_kg_co2_per_kwh),
+      source: row.source,
+      validFrom: row.valid_from,
+      validTo: row.valid_to,
+    },
+  });
+}
+
+/**
+ * Get grid emission factor history for a country
+ */
+export async function getGridEFHistory(req: Request, res: Response): Promise<void> {
+  const { country } = req.params;
+
+  const result = await db.query(
+    `SELECT * FROM grid_emission_factors 
+     WHERE country ILIKE $1 OR region ILIKE $1
+     ORDER BY year DESC`,
+    [`%${country}%`]
+  );
+
+  res.json({
+    success: true,
+    data: result.rows.map((row) => ({
+      id: row.id,
+      country: row.country,
+      region: row.region,
+      gridName: row.grid_name,
+      year: row.year,
+      factorKgCo2PerKwh: parseFloat(row.factor_kg_co2_per_kwh),
+      source: row.source,
+      validFrom: row.valid_from,
+      validTo: row.valid_to,
+    })),
+  });
+}
+
+/**
+ * Override grid emission factor for a project
+ */
+export async function overrideGridEF(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  const { projectId, country, year, factorKgCo2PerKwh, source, justification } = req.body;
+
+  const overrideId = generateId();
+
+  // Check if override already exists
+  const existing = await db.query(
+    `SELECT id FROM grid_ef_overrides 
+     WHERE project_id = $1 AND country = $2 AND year = $3`,
+    [projectId, country, year]
+  );
+
+  if (existing.rows.length > 0) {
+    // Update existing override
+    await db.query(
+      `UPDATE grid_ef_overrides SET
+         factor_kg_co2_per_kwh = $1,
+         source = $2,
+         justification = $3,
+         updated_at = NOW()
+       WHERE project_id = $4 AND country = $5 AND year = $6`,
+      [factorKgCo2PerKwh, source, justification, projectId, country, year]
+    );
+
+    res.json({
+      success: true,
+      message: 'Grid EF override updated',
+      data: { id: existing.rows[0].id },
+    });
+  } else {
+    // Create new override
+    await db.query(
+      `INSERT INTO grid_ef_overrides (id, project_id, country, year, factor_kg_co2_per_kwh, source, justification, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [overrideId, projectId, country, year, factorKgCo2PerKwh, source, justification, userId]
+    );
+
+    await logAudit(userId, 'CREATE', 'grid_ef_override', overrideId, {
+      projectId, country, year, factorKgCo2PerKwh
+    }, projectId);
+
+    res.status(201).json({
+      success: true,
+      message: 'Grid EF override created',
+      data: { id: overrideId },
+    });
+  }
+}
+
+/**
+ * Delete grid emission factor override
+ */
+export async function deleteGridEFOverride(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  const { projectId, country } = req.params;
+
+  const result = await db.query(
+    `DELETE FROM grid_ef_overrides 
+     WHERE project_id = $1 AND country = $2
+     RETURNING id`,
+    [projectId, country]
+  );
+
+  if (result.rows.length === 0) {
+    throw new NotFoundError('Grid EF override not found');
+  }
+
+  await logAudit(userId, 'DELETE', 'grid_ef_override', result.rows[0].id, {
+    projectId, country
+  }, projectId);
+
+  res.json({
+    success: true,
+    message: 'Grid EF override deleted',
+  });
+}
+
+/**
+ * Get default precursor factors
+ */
+export async function getPrecursorDefaults(req: Request, res: Response): Promise<void> {
+  const result = await db.query(
+    `SELECT * FROM precursor_factors 
+     WHERE is_default = true
+     ORDER BY material_type, production_route`
+  );
+
+  res.json({
+    success: true,
+    data: result.rows.map((row) => ({
+      id: row.id,
+      materialType: row.material_type,
+      productionRoute: row.production_route,
+      factorKgCo2PerKg: parseFloat(row.factor_kg_co2_per_kg),
+      source: row.source,
+      notes: row.notes,
+    })),
+  });
+}
+
+/**
+ * Get precursor factors for a project (including overrides)
+ */
+export async function getProjectPrecursorFactors(req: Request, res: Response): Promise<void> {
+  const { projectId } = req.params;
+
+  // Get default factors
+  const defaultsResult = await db.query(
+    `SELECT * FROM precursor_factors WHERE is_default = true`
+  );
+
+  // Get project overrides
+  const overridesResult = await db.query(
+    `SELECT * FROM precursor_factor_overrides WHERE project_id = $1`,
+    [projectId]
+  );
+
+  // Merge defaults with overrides
+  const factors = defaultsResult.rows.map((defaultFactor) => {
+    const override = overridesResult.rows.find(
+      (o) => o.material_type === defaultFactor.material_type && 
+             o.production_route === defaultFactor.production_route
+    );
+
+    if (override) {
+      return {
+        id: defaultFactor.id,
+        materialType: defaultFactor.material_type,
+        productionRoute: defaultFactor.production_route,
+        factorKgCo2PerKg: parseFloat(override.factor_kg_co2_per_kg),
+        source: override.source,
+        isOverridden: true,
+        overrideId: override.id,
+        justification: override.justification,
+      };
+    }
+
+    return {
+      id: defaultFactor.id,
+      materialType: defaultFactor.material_type,
+      productionRoute: defaultFactor.production_route,
+      factorKgCo2PerKg: parseFloat(defaultFactor.factor_kg_co2_per_kg),
+      source: defaultFactor.source,
+      isOverridden: false,
+    };
+  });
+
+  res.json({
+    success: true,
+    data: factors,
+  });
+}
+
+/**
+ * Override precursor factor for a project
+ */
+export async function overridePrecursorFactor(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  const { projectId, materialType, productionRoute, factorKgCo2PerKg, source, justification } = req.body;
+
+  const overrideId = generateId();
+
+  // Check if override already exists
+  const existing = await db.query(
+    `SELECT id FROM precursor_factor_overrides 
+     WHERE project_id = $1 AND material_type = $2 AND production_route = $3`,
+    [projectId, materialType, productionRoute]
+  );
+
+  if (existing.rows.length > 0) {
+    await db.query(
+      `UPDATE precursor_factor_overrides SET
+         factor_kg_co2_per_kg = $1,
+         source = $2,
+         justification = $3,
+         updated_at = NOW()
+       WHERE project_id = $4 AND material_type = $5 AND production_route = $6`,
+      [factorKgCo2PerKg, source, justification, projectId, materialType, productionRoute]
+    );
+
+    res.json({
+      success: true,
+      message: 'Precursor factor override updated',
+      data: { id: existing.rows[0].id },
+    });
+  } else {
+    await db.query(
+      `INSERT INTO precursor_factor_overrides (id, project_id, material_type, production_route, factor_kg_co2_per_kg, source, justification, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [overrideId, projectId, materialType, productionRoute, factorKgCo2PerKg, source, justification, userId]
+    );
+
+    await logAudit(userId, 'CREATE', 'precursor_factor_override', overrideId, {
+      projectId, materialType, productionRoute, factorKgCo2PerKg
+    }, projectId);
+
+    res.status(201).json({
+      success: true,
+      message: 'Precursor factor override created',
+      data: { id: overrideId },
+    });
+  }
+}
+
+/**
+ * Delete precursor factor override
+ */
+export async function deletePrecursorOverride(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  const { projectId, materialType, productionRoute } = req.params;
+
+  const result = await db.query(
+    `DELETE FROM precursor_factor_overrides 
+     WHERE project_id = $1 AND material_type = $2 AND production_route = $3
+     RETURNING id`,
+    [projectId, materialType, productionRoute]
+  );
+
+  if (result.rows.length === 0) {
+    throw new NotFoundError('Precursor factor override not found');
+  }
+
+  await logAudit(userId, 'DELETE', 'precursor_factor_override', result.rows[0].id, {
+    projectId, materialType, productionRoute
+  }, projectId);
+
+  res.json({
+    success: true,
+    message: 'Precursor factor override deleted',
+  });
+}
+
+/**
+ * Get standard emission factors by standard
+ */
+export async function getStandardEFs(req: Request, res: Response): Promise<void> {
+  const { standard } = req.params;
+
+  const result = await db.query(
+    `SELECT * FROM emission_factors 
+     WHERE source ILIKE $1 OR category ILIKE $1
+     ORDER BY category, activity_type`,
+    [`%${standard}%`]
+  );
+
+  res.json({
+    success: true,
+    data: result.rows.map((row) => ({
+      id: row.id,
+      category: row.category,
+      activityType: row.activity_type,
+      scope: row.scope,
+      unit: row.unit,
+      factorValue: parseFloat(row.factor_value),
+      factorUnit: row.factor_unit,
+      source: row.source,
+      region: row.region,
+      year: row.year,
+      notes: row.notes,
+    })),
   });
 }

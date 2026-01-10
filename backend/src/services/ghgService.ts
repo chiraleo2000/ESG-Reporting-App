@@ -137,7 +137,7 @@ export async function lookupEmissionFactor(
       factor: parseFloat(dbResult.rows[0].factor_value),
       source: dbResult.rows[0].source,
     };
-    await redis.set(cacheKey, JSON.stringify(result), 3600);
+    await redis.setex(cacheKey, 3600, JSON.stringify(result));
     return result;
   }
 
@@ -149,7 +149,7 @@ export async function lookupEmissionFactor(
     
     if (factor !== undefined) {
       const result = { factor, source: 'default' };
-      await redis.set(cacheKey, JSON.stringify(result), 3600);
+      await redis.setex(cacheKey, 3600, JSON.stringify(result));
       return result;
     }
   }
@@ -187,7 +187,7 @@ export async function getGridEmissionFactor(
       factor: parseFloat(result.rows[0].factor_kg_co2_per_kwh),
       source: result.rows[0].source,
     };
-    await redis.set(cacheKey, JSON.stringify(data), 86400);
+    await redis.setex(cacheKey, 86400, JSON.stringify(data));
     return data;
   }
 

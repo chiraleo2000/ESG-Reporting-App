@@ -51,8 +51,8 @@ const STANDARD_CONFIGS: Record<ReportStandard, StandardConfig> = {
       'uk_commodity_code', 'uk_cbam_sector'
     ],
   },
-  china_carbon: {
-    id: 'china_carbon',
+  china_carbon_market: {
+    id: 'china_carbon_market',
     name: 'China Carbon Market',
     fullName: 'China National Carbon Trading Market',
     region: 'China',
@@ -424,7 +424,7 @@ function getStandardSections(standardId: ReportStandard): Section[] {
       { id: 'embedded', name: 'Embedded Emissions', description: 'Emissions embedded in goods', required: true },
       { id: 'verification', name: 'Verification', description: 'Third-party verification details', required: false },
     ],
-    china_carbon: [
+    china_carbon_market: [
       { id: 'enterprise', name: 'Enterprise Information', description: 'Detailed enterprise data', required: true },
       { id: 'fuel', name: 'Fuel Consumption', description: 'Fuel types and consumption', required: true },
       { id: 'electricity', name: 'Electricity Data', description: 'Electricity consumption and sources', required: true },

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
-import { redis } from '../config/redis';
+import { redisClient as redis } from '../config/redis';
 import { generateId, convertUnits } from '../utils/helpers';
 import { BadRequestError, NotFoundError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
@@ -498,6 +498,168 @@ export async function getActivitySummary(req: Request, res: Response): Promise<v
       })),
     },
   });
+}
+
+/**
+ * Create activity for a specific project (project ID from URL param)
+ */
+export async function createActivityForProject(req: Request, res: Response): Promise<void> {
+  const { projectId } = req.params;
+  const userId = req.user!.id;
+  const {
+    name,
+    description,
+    scope,
+    scope3Category,
+    activityType,
+    quantity,
+    unit,
+    source,
+    tierLevel,
+    tierDirection,
+    dataSource,
+    dataQualityScore,
+    metadata,
+  } = req.body;
+
+  // Verify project exists
+  const projectCheck = await db.query('SELECT id FROM projects WHERE id = $1', [projectId]);
+  if (projectCheck.rows.length === 0) {
+    throw new NotFoundError('Project not found');
+  }
+
+  const activityId = generateId();
+
+  // Validate scope3Category if scope is scope3
+  if (scope === 'scope3' && !scope3Category) {
+    throw new BadRequestError('scope3Category is required for Scope 3 activities');
+  }
+
+  const result = await db.query(
+    `INSERT INTO activities (
+      id, project_id, name, description, scope, scope3_category,
+      activity_type, quantity, unit, source, tier_level, tier_direction,
+      data_source, data_quality_score, metadata
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    RETURNING *`,
+    [
+      activityId,
+      projectId,
+      name,
+      description || null,
+      scope,
+      scope3Category || null,
+      activityType,
+      quantity,
+      unit,
+      source || null,
+      tierLevel || 'tier1',
+      tierDirection || 'both',
+      dataSource || null,
+      dataQualityScore || null,
+      metadata ? JSON.stringify(metadata) : null,
+    ]
+  );
+
+  await logAudit(userId, 'CREATE', 'activity', activityId, { name, scope, activityType }, projectId);
+
+  // Clear project cache
+  await redis.del(redis.keys.projectActivities(projectId));
+
+  const activity = result.rows[0];
+
+  res.status(201).json({
+    success: true,
+    data: formatActivity(activity),
+  });
+}
+
+/**
+ * Export activities to CSV
+ */
+export async function exportActivities(req: Request, res: Response): Promise<void> {
+  const { projectId } = req.params;
+  const { format = 'csv' } = req.query;
+
+  // Get all activities for the project
+  const result = await db.query(
+    `SELECT a.*, 
+            ef.source as ef_source, ef.factor_value as ef_factor
+     FROM activities a
+     LEFT JOIN emission_factors ef ON a.emission_factor_used = ef.id
+     WHERE a.project_id = $1
+     ORDER BY a.scope, a.scope3_category, a.activity_type, a.created_at`,
+    [projectId]
+  );
+
+  const activities = result.rows;
+
+  if (format === 'csv') {
+    // Generate CSV content
+    const headers = [
+      'ID',
+      'Name',
+      'Description',
+      'Scope',
+      'Scope 3 Category',
+      'Activity Type',
+      'Quantity',
+      'Unit',
+      'Source',
+      'Tier Level',
+      'Tier Direction',
+      'Calculation Status',
+      'Total Emissions (kg CO2e)',
+      'Emission Factor Source',
+      'Emission Factor Value',
+      'Data Source',
+      'Data Quality Score',
+      'Created At',
+      'Updated At'
+    ];
+
+    const csvRows = [headers.join(',')];
+    
+    for (const activity of activities) {
+      const row = [
+        activity.id,
+        `"${(activity.name || '').replace(/"/g, '""')}"`,
+        `"${(activity.description || '').replace(/"/g, '""')}"`,
+        activity.scope,
+        activity.scope3_category || '',
+        activity.activity_type,
+        activity.quantity,
+        activity.unit,
+        `"${(activity.source || '').replace(/"/g, '""')}"`,
+        activity.tier_level,
+        activity.tier_direction,
+        activity.calculation_status,
+        activity.total_emissions_kg_co2e || '',
+        activity.ef_source || '',
+        activity.ef_factor || '',
+        `"${(activity.data_source || '').replace(/"/g, '""')}"`,
+        activity.data_quality_score || '',
+        activity.created_at,
+        activity.updated_at
+      ];
+      csvRows.push(row.join(','));
+    }
+
+    const csvContent = csvRows.join('\n');
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=activities-${projectId}.csv`);
+    res.send(csvContent);
+  } else {
+    // Return JSON format
+    res.json({
+      success: true,
+      data: activities.map(formatActivity),
+      exportedAt: new Date().toISOString(),
+      total: activities.length
+    });
+  }
 }
 
 // Helper function to format activity response

@@ -1,3 +1,3 @@
 export { config } from './env';
 export { db, pool } from './database';
-export { cache, redis } from './redis';
+export { cache, redisClient, cacheKeys } from './redis';

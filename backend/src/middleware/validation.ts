@@ -73,20 +73,21 @@ export const emailSchema = z.string().email('Invalid email format');
 // PROJECT VALIDATION SCHEMAS
 // ============================================================================
 
+const reportingStandardEnum = z.enum([
+  'eu_cbam', 'uk_cbam', 'china_carbon_market', 'k_esg', 'maff_esg', 'thai_esg'
+]);
+
 const projectBaseSchema = z.object({
   name: z.string().min(1).max(255),
-  description: z.string().max(1000).optional(),
-  companyName: z.string().min(1).max(255),
-  companySize: z.enum(['small', 'medium', 'large', 'enterprise']),
-  sector: z.string().min(1).max(100),
+  description: z.string().max(1000).optional().nullable(),
+  company: z.string().max(255).optional().nullable(),
+  industry: z.string().max(100).optional().nullable(),
+  country: z.string().max(100).optional().nullable(),
+  region: z.string().max(100).optional().nullable(),
+  reportingStandards: z.array(reportingStandardEnum).default([]),
   baselineYear: yearSchema,
   reportingYear: yearSchema,
-  countries: z.array(countryCodeSchema).min(1),
-  standardsSelected: z.array(z.enum([
-    'EU_CBAM', 'UK_CBAM', 'CHINA_CARBON', 'JAPAN_MAFF', 'KOREA_KESG', 'THAILAND_ESG'
-  ])).min(1),
-  cfpMode: z.boolean().default(true),
-  cfoMode: z.boolean().default(true),
+  settings: z.record(z.any()).optional(),
 });
 
 export const createProjectSchema = projectBaseSchema.refine((data) => data.baselineYear <= data.reportingYear, {
@@ -101,43 +102,31 @@ export const updateProjectSchema = projectBaseSchema.partial();
 // ============================================================================
 
 export const createActivitySchema = z.object({
-  projectId: uuidSchema,
-  date: dateSchema,
+  projectId: uuidSchema.optional(), // Optional when in URL params
+  name: z.string().min(1).max(255),
+  description: z.string().max(1000).optional().nullable(),
   scope: z.enum(['scope1', 'scope2', 'scope3']),
-  category: z.string().min(1).max(100),
-  tier: z.enum(['tier1', 'tier2', 'tier2_plus']).optional(),
-  direction: z.enum(['upstream', 'downstream']).optional(),
+  scope3Category: z.string().max(100).optional().nullable(),
   activityType: z.string().min(1).max(100),
-  activityDescription: z.string().max(500).optional(),
   quantity: z.coerce.number().positive(),
   unit: z.string().min(1).max(50),
-  region: z.string().min(1).max(100),
-  country: countryCodeSchema,
-  materialType: z.string().max(100).optional(),
-  productionRoute: z.string().max(100).optional(),
-  emissionFactor: z.coerce.number().positive().optional(),
-  emissionFactorSource: z.string().max(255).optional(),
-  emissionFactorUnit: z.string().max(50).optional(),
-  baselineYear: yearSchema,
-  reportingYear: yearSchema,
-  notes: z.string().max(1000).optional(),
+  source: z.string().max(255).optional().nullable(),
+  tierLevel: z.enum(['tier1', 'tier2', 'tier3']).default('tier1'),
+  tierDirection: z.enum(['upstream', 'downstream', 'both']).default('both'),
+  dataSource: z.string().max(255).optional().nullable(),
+  dataQualityScore: z.coerce.number().min(1).max(5).optional().nullable(),
+  metadata: z.record(z.any()).optional().nullable(),
 });
 
 export const updateActivitySchema = createActivitySchema.partial().omit({ projectId: true });
 
 export const activityFilterSchema = z.object({
   scope: z.enum(['scope1', 'scope2', 'scope3']).optional(),
+  status: z.enum(['pending', 'calculated', 'error']).optional(),
+  search: z.string().optional(),
   category: z.string().optional(),
-  tier: z.enum(['tier1', 'tier2', 'tier2_plus']).optional(),
-  direction: z.enum(['upstream', 'downstream']).optional(),
-  region: z.string().optional(),
-  country: countryCodeSchema.optional(),
-  materialType: z.string().optional(),
-  productionRoute: z.string().optional(),
-  dateFrom: dateSchema.optional(),
-  dateTo: dateSchema.optional(),
-  baselineYear: yearSchema.optional(),
-  reportingYear: yearSchema.optional(),
+  tier: z.enum(['tier1', 'tier2', 'tier3']).optional(),
+  direction: z.enum(['upstream', 'downstream', 'both']).optional(),
 });
 
 // ============================================================================

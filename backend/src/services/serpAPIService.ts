@@ -1,4 +1,4 @@
-import { env } from '../config/env';
+import { config } from '../config/env';
 import { redis } from '../config/redis';
 import { logger } from '../utils/logger';
 
@@ -54,7 +54,7 @@ export async function searchEmissionFactors(
   // Make API request
   try {
     const params = new URLSearchParams({
-      api_key: env.SERPAPI_KEY,
+      api_key: config.serpapi.key || '',
       q: searchTerms,
       engine: 'google',
       num: '10',
@@ -76,7 +76,7 @@ export async function searchEmissionFactors(
     const results = parseSearchResults(data.organic_results || [], activityType, unit);
 
     // Cache for 24 hours
-    await redis.set(cacheKey, JSON.stringify(results), 86400);
+    await redis.setex(cacheKey, 86400, JSON.stringify(results));
 
     return results;
   } catch (error) {
@@ -106,7 +106,7 @@ export async function searchGridEmissionFactors(
 
   try {
     const params = new URLSearchParams({
-      api_key: env.SERPAPI_KEY,
+      api_key: config.serpapi.key || '',
       q: searchTerms,
       engine: 'google',
       num: '10',
@@ -121,7 +121,7 @@ export async function searchGridEmissionFactors(
     const data: SerpAPIResponse = await response.json();
     const results = parseGridResults(data.organic_results || [], region, searchYear);
 
-    await redis.set(cacheKey, JSON.stringify(results), 86400);
+    await redis.setex(cacheKey, 86400, JSON.stringify(results));
 
     return results;
   } catch (error) {
@@ -154,7 +154,7 @@ export async function searchPrecursorFactors(
 
   try {
     const params = new URLSearchParams({
-      api_key: env.SERPAPI_KEY,
+      api_key: config.serpapi.key || '',
       q: searchTerms,
       engine: 'google',
       num: '10',
@@ -169,7 +169,7 @@ export async function searchPrecursorFactors(
     const data: SerpAPIResponse = await response.json();
     const results = parsePrecursorResults(data.organic_results || [], material);
 
-    await redis.set(cacheKey, JSON.stringify(results), 86400);
+    await redis.setex(cacheKey, 86400, JSON.stringify(results));
 
     return results;
   } catch (error) {

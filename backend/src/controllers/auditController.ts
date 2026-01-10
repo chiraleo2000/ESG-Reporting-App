@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
-import { env } from '../config/env';
+import { config } from '../config/env';
 import { generateId } from '../utils/helpers';
 import { NotFoundError, BadRequestError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
@@ -336,7 +336,7 @@ export async function getAuditLog(req: Request, res: Response): Promise<void> {
  * Get audit retention info
  */
 export async function getAuditRetentionInfo(req: Request, res: Response): Promise<void> {
-  const retentionDays = env.AUDIT_RETENTION_DAYS;
+  const retentionDays = config.audit.retentionDays;
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
 
@@ -362,6 +362,84 @@ export async function getAuditRetentionInfo(req: Request, res: Response): Promis
       totalLogs: parseInt(totalResult.rows[0].count),
       expiredLogs: parseInt(expiredResult.rows[0].count),
       oldestLog: oldestResult.rows[0]?.created_at?.toISOString() || null,
+    },
+  });
+}
+
+/**
+ * Filter audit logs by action type for a specific project
+ */
+export async function filterAuditLogs(req: Request, res: Response): Promise<void> {
+  const { projectId } = req.params;
+  const { action, entityType, startDate, endDate, page = 1, limit = 50 } = req.query;
+  const offset = (Number(page) - 1) * Number(limit);
+
+  let whereClause = 'WHERE al.project_id = $1';
+  const params: any[] = [projectId];
+  let paramIndex = 2;
+
+  if (action) {
+    whereClause += ` AND al.action = $${paramIndex}`;
+    params.push(action);
+    paramIndex++;
+  }
+
+  if (entityType) {
+    whereClause += ` AND al.entity_type = $${paramIndex}`;
+    params.push(entityType);
+    paramIndex++;
+  }
+
+  if (startDate) {
+    whereClause += ` AND al.created_at >= $${paramIndex}`;
+    params.push(new Date(startDate as string));
+    paramIndex++;
+  }
+
+  if (endDate) {
+    whereClause += ` AND al.created_at <= $${paramIndex}`;
+    params.push(new Date(endDate as string));
+    paramIndex++;
+  }
+
+  // Get count
+  const countResult = await db.query(
+    `SELECT COUNT(*) FROM audit_logs al ${whereClause}`,
+    params
+  );
+  const total = parseInt(countResult.rows[0].count);
+
+  // Get results
+  const queryParams = [...params, Number(limit), offset];
+  const result = await db.query(
+    `SELECT al.*, u.name as user_name, u.email as user_email
+     FROM audit_logs al
+     LEFT JOIN users u ON al.user_id = u.id
+     ${whereClause}
+     ORDER BY al.created_at DESC
+     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+    queryParams
+  );
+
+  res.json({
+    success: true,
+    data: result.rows.map((row) => ({
+      id: row.id,
+      userId: row.user_id,
+      userName: row.user_name,
+      userEmail: row.user_email,
+      projectId: row.project_id,
+      action: row.action,
+      entityType: row.entity_type,
+      entityId: row.entity_id,
+      details: row.details,
+      createdAt: row.created_at,
+    })),
+    pagination: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
     },
   });
 }

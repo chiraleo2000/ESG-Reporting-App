@@ -22,7 +22,7 @@ const storage = multer.diskStorage({
 
 const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   const ext = path.extname(file.originalname).toLowerCase();
-  if (config.upload.allowedTypes.includes(ext)) {
+  if ((config.upload.allowedTypes as readonly string[]).includes(ext)) {
     cb(null, true);
   } else {
     cb(new Error(`Invalid file type. Allowed types: ${config.upload.allowedTypes.join(', ')}`));

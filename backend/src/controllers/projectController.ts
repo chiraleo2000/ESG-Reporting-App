@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
-import { redis } from '../config/redis';
+import { redisClient as redis } from '../config/redis';
 import { generateId } from '../utils/helpers';
 import { BadRequestError, NotFoundError, ForbiddenError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
@@ -35,37 +35,36 @@ export async function createProject(req: Request, res: Response): Promise<void> 
     name,
     description,
     company,
-    facilityName,
-    facilityLocation,
     industry,
+    country,
+    region,
     reportingStandards,
-    defaultStandard,
     baselineYear,
     reportingYear,
+    settings,
   } = req.body;
 
   const projectId = generateId();
 
   const result = await db.query(
     `INSERT INTO projects (
-      id, name, description, company, facility_name, facility_location,
-      industry, reporting_standards, default_standard, baseline_year, 
-      reporting_year, owner_id
+      id, name, description, organization, industry, country, region,
+      baseline_year, reporting_year, standards, settings, created_by, status
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::report_standard[], $11, $12, 'active')
     RETURNING *`,
     [
       projectId,
       name,
       description || null,
-      company,
-      facilityName || null,
-      facilityLocation || null,
+      company || null,
       industry || null,
-      JSON.stringify(reportingStandards),
-      defaultStandard || reportingStandards[0],
+      country || null,
+      region || null,
       baselineYear,
       reportingYear,
+      reportingStandards || [],
+      settings ? JSON.stringify(settings) : '{}',
       userId,
     ]
   );
@@ -91,15 +90,15 @@ export async function createProject(req: Request, res: Response): Promise<void> 
       id: project.id,
       name: project.name,
       description: project.description,
-      company: project.company,
-      facilityName: project.facility_name,
-      facilityLocation: project.facility_location,
+      organization: project.organization,
       industry: project.industry,
-      reportingStandards: project.reporting_standards,
-      defaultStandard: project.default_standard,
+      country: project.country,
+      region: project.region,
+      standards: project.standards,
       baselineYear: project.baseline_year,
       reportingYear: project.reporting_year,
       status: project.status,
+      settings: project.settings,
       createdAt: project.created_at,
       updatedAt: project.updated_at,
     },
@@ -624,6 +623,225 @@ export async function cloneProject(req: Request, res: Response): Promise<void> {
     data: {
       id: newProjectId,
       message: 'Project cloned successfully',
+    },
+  });
+}
+
+/**
+ * Get project comparison (baseline vs reporting year)
+ */
+export async function getProjectComparison(req: Request, res: Response): Promise<void> {
+  const { id } = req.params;
+
+  // Get project details
+  const projectResult = await db.query(
+    `SELECT baseline_year, reporting_year FROM projects WHERE id = $1`,
+    [id]
+  );
+
+  if (projectResult.rows.length === 0) {
+    throw new NotFoundError('Project not found');
+  }
+
+  const project = projectResult.rows[0];
+
+  // Get CFO results for both years
+  const cfoResults = await db.query(
+    `SELECT * FROM cfo_results 
+     WHERE project_id = $1 AND reporting_year IN ($2, $3)
+     ORDER BY reporting_year`,
+    [id, project.baseline_year, project.reporting_year]
+  );
+
+  const baselineCFO = cfoResults.rows.find((r) => r.reporting_year === project.baseline_year);
+  const reportingCFO = cfoResults.rows.find((r) => r.reporting_year === project.reporting_year);
+
+  // Calculate comparison metrics
+  let comparison = null;
+  if (baselineCFO && reportingCFO) {
+    const baselineTotal = parseFloat(baselineCFO.cfo_total);
+    const reportingTotal = parseFloat(reportingCFO.cfo_total);
+    const absoluteChange = reportingTotal - baselineTotal;
+    const percentageChange = baselineTotal > 0 ? (absoluteChange / baselineTotal) * 100 : 0;
+
+    comparison = {
+      baselineYear: project.baseline_year,
+      reportingYear: project.reporting_year,
+      baseline: {
+        total: baselineTotal,
+        scope1: parseFloat(baselineCFO.scope1_emissions),
+        scope2: parseFloat(baselineCFO.scope2_location_emissions),
+        scope3: parseFloat(baselineCFO.scope3_upstream_emissions) + parseFloat(baselineCFO.scope3_downstream_emissions),
+      },
+      reporting: {
+        total: reportingTotal,
+        scope1: parseFloat(reportingCFO.scope1_emissions),
+        scope2: parseFloat(reportingCFO.scope2_location_emissions),
+        scope3: parseFloat(reportingCFO.scope3_upstream_emissions) + parseFloat(reportingCFO.scope3_downstream_emissions),
+      },
+      change: {
+        absolute: absoluteChange,
+        percentage: percentageChange,
+        direction: absoluteChange > 0 ? 'increase' : absoluteChange < 0 ? 'decrease' : 'unchanged',
+      },
+    };
+  }
+
+  res.json({
+    success: true,
+    data: {
+      comparison,
+      hasBaselineData: !!baselineCFO,
+      hasReportingData: !!reportingCFO,
+    },
+  });
+}
+
+/**
+ * Get project calculation history
+ */
+export async function getCalculationHistory(req: Request, res: Response): Promise<void> {
+  const { id } = req.params;
+  const { page = 1, limit = 20 } = req.query;
+  const offset = (Number(page) - 1) * Number(limit);
+
+  // Get CFP history
+  const cfpResult = await db.query(
+    `SELECT id, product_name, cfp_total, cfp_per_unit, created_at
+     FROM cfp_results
+     WHERE project_id = $1
+     ORDER BY created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [id, Number(limit), offset]
+  );
+
+  // Get CFO history
+  const cfoResult = await db.query(
+    `SELECT id, organization_name, reporting_year, cfo_total, created_at
+     FROM cfo_results
+     WHERE project_id = $1
+     ORDER BY created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [id, Number(limit), offset]
+  );
+
+  // Get activity calculation history from audit logs
+  const auditResult = await db.query(
+    `SELECT id, action, entity_type, entity_id, details, created_at
+     FROM audit_logs
+     WHERE project_id = $1 
+       AND action IN ('CALCULATE', 'BULK_CALCULATE', 'CALCULATE_CFP', 'CALCULATE_CFO')
+     ORDER BY created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [id, Number(limit), offset]
+  );
+
+  // Get total count
+  const countResult = await db.query(
+    `SELECT 
+       (SELECT COUNT(*) FROM cfp_results WHERE project_id = $1) as cfp_count,
+       (SELECT COUNT(*) FROM cfo_results WHERE project_id = $1) as cfo_count`,
+    [id]
+  );
+
+  res.json({
+    success: true,
+    data: {
+      cfpHistory: cfpResult.rows.map((row) => ({
+        id: row.id,
+        productName: row.product_name,
+        cfpTotal: parseFloat(row.cfp_total),
+        cfpPerUnit: parseFloat(row.cfp_per_unit),
+        createdAt: row.created_at,
+      })),
+      cfoHistory: cfoResult.rows.map((row) => ({
+        id: row.id,
+        organizationName: row.organization_name,
+        reportingYear: row.reporting_year,
+        cfoTotal: parseFloat(row.cfo_total),
+        createdAt: row.created_at,
+      })),
+      auditHistory: auditResult.rows.map((row) => ({
+        id: row.id,
+        action: row.action,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        details: row.details,
+        createdAt: row.created_at,
+      })),
+    },
+    pagination: {
+      page: Number(page),
+      limit: Number(limit),
+      cfpTotal: parseInt(countResult.rows[0].cfp_count),
+      cfoTotal: parseInt(countResult.rows[0].cfo_count),
+    },
+  });
+}
+
+/**
+ * Get project reports
+ */
+export async function getProjectReports(req: Request, res: Response): Promise<void> {
+  const { id } = req.params;
+  const { page = 1, limit = 20, standard, status } = req.query;
+  const offset = (Number(page) - 1) * Number(limit);
+
+  let whereClause = 'WHERE project_id = $1';
+  const params: any[] = [id];
+  let paramIndex = 2;
+
+  if (standard) {
+    whereClause += ` AND standard = $${paramIndex}`;
+    params.push(standard);
+    paramIndex++;
+  }
+
+  if (status) {
+    whereClause += ` AND status = $${paramIndex}`;
+    params.push(status);
+    paramIndex++;
+  }
+
+  // Get total count
+  const countResult = await db.query(
+    `SELECT COUNT(*) FROM reports ${whereClause}`,
+    params
+  );
+  const total = parseInt(countResult.rows[0].count);
+
+  // Get reports
+  params.push(Number(limit), offset);
+  const result = await db.query(
+    `SELECT r.*, u.name as generated_by_name
+     FROM reports r
+     LEFT JOIN users u ON r.generated_by = u.id
+     ${whereClause}
+     ORDER BY r.created_at DESC
+     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+    params
+  );
+
+  res.json({
+    success: true,
+    data: result.rows.map((row) => ({
+      id: row.id,
+      standard: row.standard,
+      format: row.format,
+      status: row.status,
+      validationWarnings: row.validation_warnings,
+      validationErrors: row.validation_errors,
+      generatedBy: row.generated_by_name,
+      signedAt: row.signed_at,
+      signedBy: row.signed_by,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    })),
+    pagination: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
     },
   });
 }

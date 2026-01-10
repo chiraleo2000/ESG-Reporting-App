@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
-import { env } from '../config/env';
+import { config } from '../config/env';
 import { generateId } from '../utils/helpers';
 import { NotFoundError, BadRequestError, ForbiddenError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
@@ -36,7 +36,7 @@ export async function signReport(req: Request, res: Response): Promise<void> {
   const { reportId, signatureType, comments, declarationText } = req.body;
 
   // Verify user role is authorized for signing
-  const authorizedRoles = env.SIGNATURE_AUTHORIZED_ROLES;
+  const authorizedRoles = config.signature.authorizedRoles;
   if (!authorizedRoles.includes(userRole)) {
     throw new ForbiddenError(`Your role (${userRole}) is not authorized to sign reports. Authorized roles: ${authorizedRoles.join(', ')}`);
   }
@@ -161,13 +161,14 @@ export async function verifySignature(req: Request, res: Response): Promise<void
   const report = reportResult.rows[0];
 
   if (!report.signature_id) {
-    return res.json({
+    res.json({
       success: true,
       data: {
         isSigned: false,
         message: 'Report has not been signed',
       },
     });
+    return;
   }
 
   // Verify signature
@@ -327,8 +328,8 @@ export async function revokeSignature(req: Request, res: Response): Promise<void
     throw new BadRequestError('Signature is already revoked');
   }
 
-  // Verify user is authorized (must be signer or admin)
-  if (signature.user_id !== userId && req.user!.role !== 'admin') {
+  // Verify user is authorized (must be signer or owner)
+  if (signature.user_id !== userId && req.user!.role !== 'owner') {
     throw new ForbiddenError('You can only revoke your own signatures');
   }
 

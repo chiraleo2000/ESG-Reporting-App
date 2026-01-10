@@ -147,7 +147,7 @@ export const authorizeProjectOwner = (projectIdParam: string = 'projectId') => {
       const { db } = await import('../config/database');
       
       const project = await db.queryOne(
-        'SELECT user_id FROM projects WHERE id = $1 AND deleted_at IS NULL',
+        'SELECT created_by FROM projects WHERE id = $1',
         [projectId]
       );
 
@@ -155,7 +155,7 @@ export const authorizeProjectOwner = (projectIdParam: string = 'projectId') => {
         return next(new ForbiddenError('Project not found'));
       }
 
-      if (project.user_id !== req.user.userId) {
+      if (project.created_by !== req.user.userId) {
         // Check if user has viewer/editor access (for future collaboration feature)
         return next(new ForbiddenError('Not authorized to access this project'));
       }
@@ -171,14 +171,14 @@ export const authorizeProjectOwner = (projectIdParam: string = 'projectId') => {
  * Generate JWT tokens
  */
 export const generateTokens = (payload: AuthPayload) => {
-  const accessToken = jwt.sign(payload, config.jwt.secret, {
-    expiresIn: config.jwt.expiresIn,
+  const accessToken = jwt.sign(payload as object, config.jwt.secret, {
+    expiresIn: config.jwt.expiresIn as jwt.SignOptions['expiresIn'],
   });
 
   const refreshToken = jwt.sign(
     { userId: payload.userId, type: 'refresh' },
     config.jwt.secret,
-    { expiresIn: config.jwt.refreshExpiresIn }
+    { expiresIn: config.jwt.refreshExpiresIn as jwt.SignOptions['expiresIn'] }
   );
 
   return { accessToken, refreshToken };
@@ -202,14 +202,16 @@ export const verifyRefreshToken = (token: string): { userId: string } => {
  */
 export const generateToken = (user: TokenUser): string => {
   const payload: AuthPayload = {
+    id: user.id,
     userId: user.id,
     email: user.email,
+    name: user.name,
     role: user.role,
     signatureAuthorized: config.signature.authorizedRoles.includes(user.role),
   };
   
-  return jwt.sign(payload, config.jwt.secret, {
-    expiresIn: config.jwt.expiresIn,
+  return jwt.sign(payload as object, config.jwt.secret, {
+    expiresIn: config.jwt.expiresIn as jwt.SignOptions['expiresIn'],
   });
 };
 

@@ -29,20 +29,20 @@ router.get(
   asyncHandler(standardController.getStandardOverlap)
 );
 
-// Protected routes - admin only
+// Protected routes - owner only
 router.use(authenticate);
 
 // Get standard configuration
 router.get(
   '/:standardId/config',
-  authorize(['admin']),
+  authorize('owner'),
   asyncHandler(standardController.getStandardConfig)
 );
 
-// Update standard configuration (admin only)
+// Update standard configuration (owner only)
 router.put(
   '/:standardId/config',
-  authorize(['admin']),
+  authorize('owner'),
   asyncHandler(standardController.updateStandardConfig)
 );
 

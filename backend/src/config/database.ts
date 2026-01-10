@@ -27,8 +27,18 @@ pool.on('remove', () => {
   logger.debug('Database connection removed from pool');
 });
 
+// Database interface type
+interface Database {
+  query<T = any>(text: string, params?: any[]): Promise<{ rows: T[]; rowCount: number }>;
+  queryOne<T = any>(text: string, params?: any[]): Promise<T | null>;
+  transaction<T>(callback: (client: any) => Promise<T>): Promise<T>;
+  healthCheck(): Promise<boolean>;
+  close(): Promise<void>;
+  end(): Promise<void>;
+}
+
 // Database helper functions
-export const db = {
+export const db: Database = {
   /**
    * Execute a query with parameters
    */
@@ -49,7 +59,7 @@ export const db = {
    * Get a single row
    */
   async queryOne<T = any>(text: string, params?: any[]): Promise<T | null> {
-    const { rows } = await this.query<T>(text, params);
+    const { rows } = await db.query<T>(text, params);
     return rows[0] || null;
   },
 
@@ -93,6 +103,14 @@ export const db = {
   async close(): Promise<void> {
     await pool.end();
     logger.info('Database pool closed');
+  },
+
+  /**
+   * End connections (alias for close)
+   */
+  async end(): Promise<void> {
+    await pool.end();
+    logger.info('Database pool ended');
   },
 };
 

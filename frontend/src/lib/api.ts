@@ -141,6 +141,10 @@ export const activitiesApi = {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+  createForProject: async (projectId: string, data: any) => apiFetch(`/activities/project/${projectId}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
   update: async (id: string, data: any) => apiFetch(`/activities/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data),
@@ -148,11 +152,40 @@ export const activitiesApi = {
   delete: async (id: string) => apiFetch(`/activities/${id}`, {
     method: 'DELETE',
   }),
+  getSummary: async (projectId: string) => apiFetch(`/activities/project/${projectId}/summary`),
+  export: async (projectId: string, format: string = 'csv') => {
+    const token = getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/activities/project/${projectId}/export?format=${format}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    return response;
+  },
 };
 
 // Calculations API
 export const calculationsApi = {
-  calculate: async (projectId: string) => apiFetch(`/calculations/project/${projectId}`, {
+  // Calculate all activities for a project
+  calculateAll: async (projectId: string) => apiFetch(`/calculations/project/${projectId}/all`, {
+    method: 'POST',
+  }),
+  // Calculate a specific activity
+  calculateActivity: async (projectId: string, activityId: string) => apiFetch(`/calculations/activity/${projectId}/${activityId}`, {
+    method: 'POST',
+  }),
+  // Get project totals (scope 1/2/3 breakdown)
+  getTotals: async (projectId: string) => apiFetch(`/calculations/project/${projectId}/totals`),
+  // Calculate CFP for project
+  calculateCFP: async (projectId: string, options?: any) => apiFetch(`/calculations/project/${projectId}/cfp`, {
+    method: 'POST',
+    body: JSON.stringify(options || {}),
+  }),
+  // Calculate CFO for project
+  calculateCFO: async (projectId: string, options?: any) => apiFetch(`/calculations/project/${projectId}/cfo`, {
+    method: 'POST',
+    body: JSON.stringify(options || {}),
+  }),
+  // Legacy: calculate (alias for calculateAll)
+  calculate: async (projectId: string) => apiFetch(`/calculations/project/${projectId}/all`, {
     method: 'POST',
   }),
   getHistory: async (projectId: string) => apiFetch(`/calculations/project/${projectId}/history`),

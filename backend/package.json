@@ -10,10 +10,12 @@
     "start": "node dist/server.js",
     "test": "jest --coverage",
     "test:watch": "jest --watch",
+    "test:e2e": "mocha --require ts-node/register tests/e2e/**/*.test.ts --timeout 120000",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "migrate": "ts-node src/db/migrate.ts",
     "seed": "ts-node src/db/seed.ts",
+    "seed:sugar": "ts-node src/db/seed-sugar-factory.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -70,6 +70,7 @@ export interface Report {
 interface AppState {
   // Auth
   user: User | null;
+  token: string | null;
   isAuthenticated: boolean;
   
   // Projects
@@ -92,6 +93,7 @@ interface AppState {
   
   // Actions - Auth
   setUser: (user: User | null) => void;
+  setToken: (token: string | null) => void;
   logout: () => void;
   
   // Actions - Projects
@@ -126,6 +128,7 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       // Initial State
       user: null,
+      token: null,
       isAuthenticated: false,
       projects: [],
       currentProject: null,
@@ -139,8 +142,11 @@ export const useAppStore = create<AppState>()(
       // Auth Actions
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       
+      setToken: (token) => set({ token }),
+      
       logout: () => set({ 
         user: null, 
+        token: null,
         isAuthenticated: false,
         currentProject: null,
         activities: [],
@@ -210,6 +216,7 @@ export const useAppStore = create<AppState>()(
       name: 'esg-app-storage',
       partialize: (state) => ({
         user: state.user,
+        token: state.token,
         isAuthenticated: state.isAuthenticated,
         currentProject: state.currentProject,
       }),
@@ -219,6 +226,7 @@ export const useAppStore = create<AppState>()(
 
 // Selector hooks for better performance
 export const useUser = () => useAppStore((state) => state.user);
+export const useToken = () => useAppStore((state) => state.token);
 export const useProjects = () => useAppStore((state) => state.projects);
 export const useCurrentProject = () => useAppStore((state) => state.currentProject);
 export const useActivities = () => useAppStore((state) => state.activities);

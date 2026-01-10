@@ -1,12 +1,12 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
-import { redis } from '../config/redis';
+import { redisClient as redis } from '../config/redis';
 import { config } from '../config/env';
-import { generateToken, hashPassword, comparePassword } from '../middleware/auth';
+import { generateToken, generateTokens, hashPassword, comparePassword } from '../middleware/auth';
 import { generateId } from '../utils/helpers';
 import { BadRequestError, UnauthorizedError, NotFoundError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
-import type { UserRole } from '../types';
+import type { UserRole, AuthPayload } from '../types';
 
 // User type for auth operations (matches token generation)
 interface User {
@@ -375,10 +375,54 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
  */
 export async function refreshToken(req: Request, res: Response): Promise<void> {
   const user = req.user!;
-  const token = generateToken(user);
+  
+  // Create a new token from the existing auth payload
+  const newPayload: AuthPayload = {
+    id: user.id,
+    userId: user.userId,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    signatureAuthorized: user.signatureAuthorized,
+  };
+  
+  const { accessToken } = generateTokens(newPayload);
 
   res.json({
     success: true,
-    data: { token },
+    data: { token: accessToken },
+  });
+}
+
+/**
+ * Get current user (alias for getProfile for route compatibility)
+ */
+export async function getCurrentUser(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.id;
+
+  const result = await db.query(
+    `SELECT id, email, name, organization as company, role, created_at, updated_at, last_login_at as last_login
+     FROM users WHERE id = $1`,
+    [userId]
+  );
+
+  if (result.rows.length === 0) {
+    throw new NotFoundError('User not found');
+  }
+
+  const user = result.rows[0];
+
+  res.json({
+    success: true,
+    data: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      company: user.company,
+      role: user.role,
+      createdAt: user.created_at,
+      updatedAt: user.updated_at,
+      lastLogin: user.last_login,
+    },
   });
 }

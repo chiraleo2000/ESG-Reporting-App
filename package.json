@@ -9,7 +9,11 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "docker:seed": "docker compose exec backend node dist/db/seed.js",
-    "dev:db": "docker compose up -d postgres redis"
+    "dev:db": "docker compose up -d postgres redis",
+    "test:e2e": "npx playwright test",
+    "test:e2e:ui": "npx playwright test --ui",
+    "test:e2e:headed": "npx playwright test --headed",
+    "test:e2e:report": "npx playwright show-report"
   },
   "keywords": [
     "esg",
@@ -26,5 +30,8 @@
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
   }
 }

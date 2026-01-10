@@ -7,7 +7,7 @@ config({ path: '.env.test' });
 // Set test environment variables
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-jwt-secret-key-for-unit-testing-32chars';
-process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5434/esg_test';
+process.env.DATABASE_URL = 'postgresql://postgres:postgres123@localhost:5434/esg_reporting';
 process.env.REDIS_URL = 'redis://localhost:6379';
 
 // Global test utilities

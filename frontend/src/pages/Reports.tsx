@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   FileText,
@@ -17,6 +17,10 @@ import {
   Plus,
   Settings,
   Leaf,
+  Globe,
+  Loader2,
+  RefreshCw,
+  MapPin,
 } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button, IconButton } from '@/components/ui/Button';
@@ -26,82 +30,25 @@ import { EmptyReports } from '@/components/ui/EmptyState';
 import { Input, Select, Checkbox, Toggle } from '@/components/ui/Input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { Progress } from '@/components/ui/Progress';
+import { projectsApi, reportsApi, calculationsApi } from '@/lib/api';
+import { useAuthStore } from '@/store/authStore';
 
-// Mock data
-const mockReports = [
-  {
-    id: '1',
-    name: 'Annual Carbon Footprint Report 2024',
-    type: 'GHG Inventory',
-    project: 'Corporate HQ Carbon Footprint 2024',
-    format: 'PDF',
-    status: 'completed' as const,
-    createdAt: '2024-03-15T10:30:00',
-    completedAt: '2024-03-15T10:45:00',
-    size: '2.4 MB',
-    emissions: 6201,
-    pages: 24,
-  },
-  {
-    id: '2',
-    name: 'Q1 Emissions Summary',
-    type: 'Quarterly Report',
-    project: 'Corporate HQ Carbon Footprint 2024',
-    format: 'Excel',
-    status: 'completed' as const,
-    createdAt: '2024-04-01T09:00:00',
-    completedAt: '2024-04-01T09:15:00',
-    size: '856 KB',
-    emissions: 1550,
-    pages: 8,
-  },
-  {
-    id: '3',
-    name: 'Supply Chain Analysis Report',
-    type: 'Scope 3 Report',
-    project: 'Supply Chain Emissions Analysis',
-    format: 'PDF',
-    status: 'generating' as const,
-    createdAt: '2024-04-10T14:20:00',
-    completedAt: null,
-    size: null,
-    emissions: 5820,
-    pages: null,
-  },
-  {
-    id: '4',
-    name: 'TCFD Climate Report',
-    type: 'TCFD Disclosure',
-    project: 'Corporate HQ Carbon Footprint 2024',
-    format: 'PDF',
-    status: 'pending' as const,
-    createdAt: '2024-04-12T08:00:00',
-    completedAt: null,
-    size: null,
-    emissions: 6201,
-    pages: null,
-  },
-  {
-    id: '5',
-    name: 'CDP Climate Response 2024',
-    type: 'CDP Submission',
-    project: 'Corporate HQ Carbon Footprint 2024',
-    format: 'XML',
-    status: 'error' as const,
-    createdAt: '2024-04-08T11:30:00',
-    completedAt: null,
-    size: null,
-    emissions: 6201,
-    pages: null,
-  },
+// Reporting standards
+const reportingStandards = [
+  { id: 'eu_cbam', name: 'EU CBAM', description: 'European Union Carbon Border Adjustment Mechanism', region: 'Europe', color: 'blue' },
+  { id: 'uk_cbam', name: 'UK CBAM', description: 'United Kingdom Carbon Border Adjustment Mechanism', region: 'United Kingdom', color: 'red' },
+  { id: 'china_carbon_market', name: 'China Carbon Market', description: 'China National Carbon Trading Market', region: 'China', color: 'yellow' },
+  { id: 'k_esg', name: 'K-ESG', description: 'Korea ESG Disclosure Standards', region: 'South Korea', color: 'green' },
+  { id: 'maff_esg', name: 'MAFF ESG', description: 'Japan Ministry of Agriculture ESG Guidelines', region: 'Japan', color: 'purple' },
+  { id: 'thai_esg', name: 'Thai ESG', description: 'Thailand ESG Reporting Standards', region: 'Thailand', color: 'orange' },
 ];
 
 const reportTypes = [
   { id: 'ghg', name: 'GHG Inventory Report', icon: Leaf, description: 'Complete greenhouse gas emissions inventory' },
-  { id: 'quarterly', name: 'Quarterly Summary', icon: FileSpreadsheet, description: 'Periodic emissions summary report' },
-  { id: 'tcfd', name: 'TCFD Disclosure', icon: FileBadge, description: 'Task Force on Climate-related Financial Disclosures' },
-  { id: 'cdp', name: 'CDP Climate', icon: FileText, description: 'Carbon Disclosure Project submission' },
-  { id: 'scope3', name: 'Scope 3 Analysis', icon: Building2, description: 'Detailed supply chain emissions report' },
+  { id: 'cfp', name: 'Carbon Footprint Product', icon: FileSpreadsheet, description: 'Product-level carbon footprint analysis' },
+  { id: 'cfo', name: 'Carbon Footprint Organization', icon: Building2, description: 'Organization-level carbon footprint' },
+  { id: 'scope3', name: 'Scope 3 Analysis', icon: Globe, description: 'Detailed supply chain emissions report' },
+  { id: 'compliance', name: 'Compliance Report', icon: FileBadge, description: 'Standard-specific compliance report' },
 ];
 
 const container = {
@@ -126,11 +73,247 @@ const statusConfig: Record<ReportStatus, { label: string; color: string; icon: R
   error: { label: 'Error', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', icon: AlertCircle },
 };
 
+interface Report {
+  id: string;
+  name: string;
+  type: string;
+  standard?: string;
+  projectId: string;
+  projectName?: string;
+  format: string;
+  status: ReportStatus;
+  createdAt: string;
+  completedAt?: string;
+  size?: string;
+  emissions?: number;
+  pages?: number;
+}
+
+interface Project {
+  id: string;
+  name: string;
+  organization?: string;
+}
+
 export const Reports: React.FC = () => {
-  const [reports] = useState(mockReports);
+  const { user } = useAuthStore();
+
+  // State
+  const [reports, setReports] = useState<Report[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('all');
+
+  // Form state
+  const [formData, setFormData] = useState({
+    projectId: '',
+    standard: '',
+    format: 'pdf',
+    startDate: '',
+    endDate: '',
+    includeSections: {
+      executiveSummary: true,
+      scopeBreakdown: true,
+      categoryAnalysis: true,
+      trendAnalysis: true,
+      methodology: false,
+      dataTables: false,
+    },
+  });
+
+  // Load data on mount
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const mapReportStatus = (status: string): ReportStatus => {
+    switch (status?.toLowerCase()) {
+      case 'generated':
+      case 'signed':
+      case 'completed':
+        return 'completed';
+      case 'generating':
+      case 'processing':
+        return 'generating';
+      case 'draft':
+      case 'pending':
+        return 'pending';
+      case 'error':
+      case 'failed':
+        return 'error';
+      default:
+        return 'completed';
+    }
+  };
+
+  const loadData = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Load projects
+      const projectsResponse = await projectsApi.getAll();
+      if (projectsResponse.success && projectsResponse.data) {
+        const projectList = projectsResponse.data as Project[];
+        setProjects(projectList);
+
+        // Load reports from all projects via backend API
+        const allReports: Report[] = [];
+        for (const project of projectList) {
+          try {
+            const reportsResponse = await reportsApi.getByProject(project.id);
+            if (reportsResponse.success && reportsResponse.data) {
+              const projectReports = (reportsResponse.data as any[]).map((r: any) => ({
+                id: r.id,
+                name: `${r.standard?.toUpperCase() || 'GHG'} Report - ${project.name}`,
+                type: r.standard || 'GHG Inventory Report',
+                standard: r.standard,
+                projectId: project.id,
+                projectName: project.name,
+                format: r.format?.toUpperCase() || 'PDF',
+                status: mapReportStatus(r.status),
+                createdAt: r.createdAt,
+                completedAt: r.signedAt,
+                emissions: r.reportData?.totals?.total,
+              }));
+              allReports.push(...projectReports);
+            }
+          } catch (projErr) {
+            console.warn(`Failed to load reports for project ${project.id}:`, projErr);
+          }
+        }
+        setReports(allReports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      }
+    } catch (err) {
+      setError('Failed to load data');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    if (!formData.projectId || !selectedReportType) {
+      setError('Please select a project and report type');
+      return;
+    }
+
+    setGenerating(true);
+    setError(null);
+
+    try {
+      // Get project details
+      const project = projects.find(p => p.id === formData.projectId);
+
+      // Generate report via API
+      const response = await reportsApi.generate({
+        projectId: formData.projectId,
+        type: selectedReportType,
+        standard: formData.standard || undefined,
+        format: formData.format,
+        startDate: formData.startDate || undefined,
+        endDate: formData.endDate || undefined,
+        options: formData.includeSections,
+      });
+
+      if (response.success && response.data) {
+        const data = response.data as any;
+        // Add new report to list
+        const newReport: Report = {
+          id: data.id || `report-${Date.now()}`,
+          name: `${getReportTypeName(selectedReportType)} - ${project?.name || 'Project'}`,
+          type: getReportTypeName(selectedReportType),
+          standard: formData.standard,
+          projectId: formData.projectId,
+          projectName: project?.name,
+          format: formData.format.toUpperCase(),
+          status: mapReportStatus(data.status || 'completed'),
+          createdAt: data.createdAt || new Date().toISOString(),
+          completedAt: data.completedAt || new Date().toISOString(),
+          emissions: data.totals?.total || 0,
+        };
+
+        // Add to reports list (will be refreshed from backend on next load)
+        setReports(prev => [newReport, ...prev]);
+
+        // Close modal and reset form
+        setShowGenerateModal(false);
+        setSelectedReportType(null);
+        resetForm();
+      } else {
+        setError(response.error || 'Failed to generate report');
+      }
+    } catch (err) {
+      setError('Failed to generate report');
+      console.error(err);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleDownloadReport = async (report: Report) => {
+    try {
+      const response = await reportsApi.download(report.id, report.format.toLowerCase());
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${report.name}.${report.format.toLowerCase()}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }
+    } catch (err) {
+      console.error('Failed to download report:', err);
+    }
+  };
+
+  const handleDeleteReport = async (reportId: string) => {
+    if (!confirm('Are you sure you want to delete this report?')) return;
+
+    try {
+      const response = await reportsApi.delete(reportId);
+      if (response.success) {
+        // Remove from local state
+        setReports(prev => prev.filter(r => r.id !== reportId));
+      } else {
+        setError(response.error || 'Failed to delete report');
+      }
+    } catch (err) {
+      // If API fails, still remove from local state for now
+      setReports(prev => prev.filter(r => r.id !== reportId));
+      console.error('Failed to delete report:', err);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      projectId: '',
+      standard: '',
+      format: 'pdf',
+      startDate: '',
+      endDate: '',
+      includeSections: {
+        executiveSummary: true,
+        scopeBreakdown: true,
+        categoryAnalysis: true,
+        trendAnalysis: true,
+        methodology: false,
+        dataTables: false,
+      },
+    });
+  };
+
+  const getReportTypeName = (typeId: string): string => {
+    const type = reportTypes.find(t => t.id === typeId);
+    return type?.name || 'Report';
+  };
 
   const filteredReports = reports.filter((report) => {
     if (activeTab === 'all') return true;
@@ -138,14 +321,22 @@ export const Reports: React.FC = () => {
   });
 
   const getFormatIcon = (format: string) => {
-    switch (format) {
+    switch (format.toUpperCase()) {
       case 'PDF':
         return FileText;
-      case 'Excel':
+      case 'EXCEL':
+      case 'XLSX':
         return FileSpreadsheet;
       default:
         return FileText;
     }
+  };
+
+  const reportCounts = {
+    all: reports.length,
+    completed: reports.filter(r => r.status === 'completed').length,
+    generating: reports.filter(r => r.status === 'generating').length,
+    pending: reports.filter(r => r.status === 'pending').length,
   };
 
   return (
@@ -162,21 +353,78 @@ export const Reports: React.FC = () => {
             Reports
           </h1>
           <p className="text-earth-500 dark:text-earth-400 mt-1">
-            Generate and manage ESG reports and disclosures
+            Generate and manage ESG reports under international standards
           </p>
         </div>
-        <Button variant="primary" onClick={() => setShowGenerateModal(true)}>
-          <Plus className="w-4 h-4" />
-          Generate Report
-        </Button>
+        <div className="flex items-center gap-3">
+          <IconButton
+            icon={<RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />}
+            variant="outline"
+            onClick={loadData}
+            disabled={loading}
+          />
+          <Button variant="primary" onClick={() => setShowGenerateModal(true)}>
+            <Plus className="w-4 h-4" />
+            Generate Report
+          </Button>
+        </div>
+      </motion.div>
+
+      {/* Error Alert */}
+      {error && (
+        <motion.div variants={item} className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+          <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+            <AlertCircle className="w-5 h-5" />
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="ml-auto text-red-500 hover:text-red-700">×</button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Reporting Standards */}
+      <motion.div variants={item}>
+        <h2 className="text-lg font-semibold text-earth-800 dark:text-earth-100 mb-4">
+          Supported Reporting Standards
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {reportingStandards.map((standard) => (
+            <Card
+              key={standard.id}
+              variant="default"
+              padding="sm"
+              hover
+              className="cursor-pointer"
+              onClick={() => {
+                setFormData(prev => ({ ...prev, standard: standard.id }));
+                setSelectedReportType('compliance');
+                setShowGenerateModal(true);
+              }}
+            >
+              <div className="text-center py-2">
+                <div className={`w-10 h-10 mx-auto rounded-xl bg-${standard.color}-100 dark:bg-${standard.color}-900/30 flex items-center justify-center mb-2`}>
+                  <MapPin className={`w-5 h-5 text-${standard.color}-600`} />
+                </div>
+                <h3 className="font-medium text-earth-800 dark:text-earth-100 text-sm">
+                  {standard.name}
+                </h3>
+                <p className="text-xs text-earth-500 dark:text-earth-400 mt-0.5">
+                  {standard.region}
+                </p>
+              </div>
+            </Card>
+          ))}
+        </div>
       </motion.div>
 
       {/* Report Type Cards */}
       <motion.div variants={item}>
+        <h2 className="text-lg font-semibold text-earth-800 dark:text-earth-100 mb-4">
+          Report Types
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {reportTypes.map((type) => {
             const Icon = type.icon;
-            const count = reports.filter((r) => r.type.toLowerCase().includes(type.id)).length;
+            const count = reports.filter((r) => r.type.toLowerCase().includes(type.name.toLowerCase().split(' ')[0])).length;
             return (
               <Card
                 key={type.id}
@@ -215,15 +463,20 @@ export const Reports: React.FC = () => {
               subtitle="View and download your reports"
               action={
                 <TabsList variant="pills">
-                  <TabsTrigger value="all" variant="pills">All</TabsTrigger>
-                  <TabsTrigger value="completed" variant="pills">Completed</TabsTrigger>
-                  <TabsTrigger value="generating" variant="pills">In Progress</TabsTrigger>
+                  <TabsTrigger value="all" variant="pills">All ({reportCounts.all})</TabsTrigger>
+                  <TabsTrigger value="completed" variant="pills">Completed ({reportCounts.completed})</TabsTrigger>
+                  <TabsTrigger value="generating" variant="pills">In Progress ({reportCounts.generating})</TabsTrigger>
                 </TabsList>
               }
             />
 
             <TabsContent value={activeTab} forceMount className="mt-0">
-              {filteredReports.length === 0 ? (
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-grass-600" />
+                  <span className="ml-2 text-earth-500">Loading reports...</span>
+                </div>
+              ) : filteredReports.length === 0 ? (
                 <EmptyReports onGenerate={() => setShowGenerateModal(true)} />
               ) : (
                 <div className="divide-y divide-grass-100 dark:divide-earth-700">
@@ -249,16 +502,24 @@ export const Reports: React.FC = () => {
                               <span className="text-sm text-earth-500 dark:text-earth-400">
                                 {report.type}
                               </span>
+                              {report.standard && (
+                                <>
+                                  <span className="text-earth-300 dark:text-earth-600">•</span>
+                                  <Badge variant="default" size="sm">
+                                    {reportingStandards.find(s => s.id === report.standard)?.name || report.standard}
+                                  </Badge>
+                                </>
+                              )}
                               <span className="text-earth-300 dark:text-earth-600">•</span>
                               <span className="text-sm text-earth-500 dark:text-earth-400 flex items-center gap-1">
                                 <Calendar className="w-3 h-3" />
                                 {new Date(report.createdAt).toLocaleDateString()}
                               </span>
-                              {report.size && (
+                              {report.emissions !== undefined && (
                                 <>
                                   <span className="text-earth-300 dark:text-earth-600">•</span>
-                                  <span className="text-sm text-earth-500 dark:text-earth-400">
-                                    {report.size}
+                                  <span className="text-sm font-medium text-grass-600">
+                                    {(report.emissions / 1000).toFixed(2)} tCO₂e
                                   </span>
                                 </>
                               )}
@@ -284,23 +545,21 @@ export const Reports: React.FC = () => {
                                   icon={<Eye className="w-4 h-4" />}
                                   variant="ghost"
                                   size="sm"
+                                  onClick={() => {/* View report */}}
                                 />
                                 <IconButton
                                   icon={<Download className="w-4 h-4" />}
                                   variant="ghost"
                                   size="sm"
-                                />
-                                <IconButton
-                                  icon={<Send className="w-4 h-4" />}
-                                  variant="ghost"
-                                  size="sm"
+                                  onClick={() => handleDownloadReport(report)}
                                 />
                               </>
                             )}
                             <IconButton
-                              icon={<MoreVertical className="w-4 h-4" />}
+                              icon={<Trash2 className="w-4 h-4" />}
                               variant="ghost"
                               size="sm"
+                              onClick={() => handleDeleteReport(report.id)}
                             />
                           </div>
                         </div>
@@ -320,6 +579,7 @@ export const Reports: React.FC = () => {
         onClose={() => {
           setShowGenerateModal(false);
           setSelectedReportType(null);
+          resetForm();
         }}
         title="Generate Report"
         size="lg"
@@ -368,24 +628,48 @@ export const Reports: React.FC = () => {
             <Select
               label="Project"
               required
+              value={formData.projectId}
+              onChange={(e) => setFormData(prev => ({ ...prev, projectId: e.target.value }))}
               options={[
                 { value: '', label: 'Select project...' },
-                { value: '1', label: 'Corporate HQ Carbon Footprint 2024' },
-                { value: '2', label: 'Supply Chain Emissions Analysis' },
+                ...projects.map(p => ({ value: p.id, label: p.name })),
+              ]}
+            />
+
+            <Select
+              label="Reporting Standard (Optional)"
+              value={formData.standard}
+              onChange={(e) => setFormData(prev => ({ ...prev, standard: e.target.value }))}
+              options={[
+                { value: '', label: 'Select standard...' },
+                ...reportingStandards.map(s => ({ value: s.id, label: `${s.name} - ${s.description}` })),
               ]}
             />
 
             <div className="grid grid-cols-2 gap-4">
-              <Input label="Start Date" type="date" />
-              <Input label="End Date" type="date" />
+              <Input
+                label="Start Date (Optional)"
+                type="date"
+                value={formData.startDate}
+                onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
+              />
+              <Input
+                label="End Date (Optional)"
+                type="date"
+                value={formData.endDate}
+                onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
+              />
             </div>
 
             <Select
               label="Output Format"
+              value={formData.format}
+              onChange={(e) => setFormData(prev => ({ ...prev, format: e.target.value }))}
               options={[
                 { value: 'pdf', label: 'PDF Document' },
                 { value: 'excel', label: 'Excel Spreadsheet' },
                 { value: 'csv', label: 'CSV Data' },
+                { value: 'json', label: 'JSON Data' },
               ]}
             />
 
@@ -395,12 +679,54 @@ export const Reports: React.FC = () => {
                 Include Sections
               </label>
               <div className="space-y-2">
-                <Checkbox label="Executive Summary" defaultChecked />
-                <Checkbox label="Emissions Breakdown by Scope" defaultChecked />
-                <Checkbox label="Category Analysis" defaultChecked />
-                <Checkbox label="Trend Analysis & Charts" defaultChecked />
-                <Checkbox label="Methodology Notes" />
-                <Checkbox label="Data Tables (Appendix)" />
+                <Checkbox
+                  label="Executive Summary"
+                  checked={formData.includeSections.executiveSummary}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    includeSections: { ...prev.includeSections, executiveSummary: e.target.checked }
+                  }))}
+                />
+                <Checkbox
+                  label="Emissions Breakdown by Scope"
+                  checked={formData.includeSections.scopeBreakdown}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    includeSections: { ...prev.includeSections, scopeBreakdown: e.target.checked }
+                  }))}
+                />
+                <Checkbox
+                  label="Category Analysis"
+                  checked={formData.includeSections.categoryAnalysis}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    includeSections: { ...prev.includeSections, categoryAnalysis: e.target.checked }
+                  }))}
+                />
+                <Checkbox
+                  label="Trend Analysis & Charts"
+                  checked={formData.includeSections.trendAnalysis}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    includeSections: { ...prev.includeSections, trendAnalysis: e.target.checked }
+                  }))}
+                />
+                <Checkbox
+                  label="Methodology Notes"
+                  checked={formData.includeSections.methodology}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    includeSections: { ...prev.includeSections, methodology: e.target.checked }
+                  }))}
+                />
+                <Checkbox
+                  label="Data Tables (Appendix)"
+                  checked={formData.includeSections.dataTables}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    includeSections: { ...prev.includeSections, dataTables: e.target.checked }
+                  }))}
+                />
               </div>
             </div>
           </div>
@@ -411,19 +737,21 @@ export const Reports: React.FC = () => {
             onClick={() => {
               setShowGenerateModal(false);
               setSelectedReportType(null);
+              resetForm();
             }}
           >
             Cancel
           </Button>
           <Button
             variant="primary"
-            onClick={() => {
-              setShowGenerateModal(false);
-              setSelectedReportType(null);
-            }}
-            disabled={!selectedReportType}
+            onClick={handleGenerateReport}
+            disabled={!selectedReportType || !formData.projectId || generating}
           >
-            <FileText className="w-4 h-4" />
+            {generating ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <FileText className="w-4 h-4" />
+            )}
             Generate Report
           </Button>
         </ModalFooter>

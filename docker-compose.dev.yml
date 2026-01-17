@@ -1,0 +1,56 @@
+# =============================================================================
+# ESG Reporting App - Development Environment
+# =============================================================================
+# Only runs PostgreSQL and Redis for local development
+# Backend and Frontend run locally with hot-reload
+# =============================================================================
+
+services:
+  # PostgreSQL Database with pgvector
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: esg-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      POSTGRES_DB: esg_reporting
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d esg_reporting"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - esg-dev-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: esg-redis-dev
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - esg-dev-network
+
+networks:
+  esg-dev-network:
+    driver: bridge
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:

@@ -10,13 +10,17 @@ A comprehensive **Environmental, Social, and Governance (ESG)** reporting platfo
 
 ## ✨ Features
 
-- **📊 GHG Emissions Tracking** - Scope 1, 2, 3 emissions with automatic calculations
-- **🧮 Built-in Calculator** - 6 GHG calculation methods with formula display
-- **📈 Analytics Dashboard** - Trends, benchmarks, AI-powered insights
-- **📑 Multi-Standard Compliance** - EU CBAM, GHG Protocol, Thai ESG, K-ESG
-- **🔐 Role-Based Access** - Admin, Editor, Viewer, Auditor roles
-- **📤 Import/Export** - CSV, JSON, Excel, PDF support
+- **📊 Complete GHG Protocol Coverage**
+  - **Scope 1**: Stationary combustion, Mobile combustion, Process emissions, Fugitive emissions
+  - **Scope 2**: Purchased electricity, Steam, Heating, Cooling (4 categories)
+  - **Scope 3**: All 14 categories as per GHG Protocol
+- **🧮 Built-in Calculator** - Tier 1/2/3 calculation methods with formula display
+- **📈 Analytics Dashboard** - Real-time trends, benchmarks, AI-powered insights
+- **📑 Multi-Standard Compliance** - EU CBAM, UK CBAM, China Carbon Market, K-ESG, MAFF ESG, Thai ESG
+- **🔐 Role-Based Access** - Admin, Director, Editor, Viewer, Auditor roles
+- **📤 Import/Export** - CSV, JSON, Excel, PDF support with file parsing
 - **🔍 Vector Search** - AI-powered document similarity (pgvector)
+- **✍️ Digital Signatures** - Report approval workflow with cryptographic signatures
 
 ---
 
@@ -32,14 +36,36 @@ A comprehensive **Environmental, Social, and Governance (ESG)** reporting platfo
 git clone https://github.com/chiraleo2000/ESG-Reporting-App.git
 cd ESG-Reporting-App
 
-# Start all services
+# Start all services (database auto-seeds on first run)
 docker compose up -d
 
-# Seed demo data (first time)
-docker compose exec backend node dist/db/seed.js
+# Wait for services to be ready (check health)
+docker compose ps
 
 # Open application
-# http://localhost:2048
+# Frontend: http://localhost:2048
+# API: http://localhost:2047/api/v1
+```
+
+### Development Setup
+
+```bash
+# Install dependencies
+cd backend && npm install && cd ..
+cd frontend && npm install && cd ..
+
+# Start PostgreSQL and Redis with Docker
+docker compose -f docker-compose.dev.yml up -d
+
+# Run backend (terminal 1)
+cd backend && npm run dev
+
+# Run frontend (terminal 2)
+cd frontend && npm run dev
+
+# Run tests
+cd backend && npm test
+cd frontend && npm test
 ```
 
 ### Demo Accounts
@@ -47,9 +73,12 @@ docker compose exec backend node dist/db/seed.js
 | Email | Password | Role |
 |-------|----------|------|
 | admin@esgdemo.com | Demo@123 | Full admin access |
-| manager@esgdemo.com | Demo@123 | Project editor |
-| viewer@esgdemo.com | Demo@123 | Read-only |
-| demo@esgdemo.com | Demo@123 | **Clean user (no data)** |
+| director@esgdemo.com | Demo@123 | Sustainability Director |
+| editor@esgdemo.com | Demo@123 | Project Editor |
+| viewer@esgdemo.com | Demo@123 | Read-only access |
+| auditor@esgdemo.com | Demo@123 | External Auditor |
+
+**Note:** Demo accounts come with 3 sample projects, 30+ activities covering all scopes, and comprehensive emission factors.
 
 ---
 

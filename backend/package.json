@@ -1,6 +1,6 @@
 {
   "name": "@esg-app/backend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "ESG Reporting App - Backend API Server",
   "main": "dist/server.js",
   "scripts": {

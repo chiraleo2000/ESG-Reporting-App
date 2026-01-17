@@ -23,13 +23,13 @@ export interface Report {
 
 export interface ReportGenerationOptions {
   projectId: string;
-  standard: string;
+  type: string;
+  standard?: string;
+  format: string;
   title?: string;
-  reportingPeriodStart?: string;
-  reportingPeriodEnd?: string;
-  includeBreakdown?: boolean;
-  includeMethodology?: boolean;
-  outputFormat?: 'json' | 'pdf' | 'html';
+  startDate?: string;
+  endDate?: string;
+  options?: Record<string, boolean>;
 }
 
 export interface UseReportsResult {

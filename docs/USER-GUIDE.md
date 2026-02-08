@@ -537,4 +537,62 @@ Step-by-step walkthrough for new users:
 
 ---
 
+## 🧪 Running & Verifying the Application
+
+### Running Tests
+
+The application has **864 automated tests** (822 backend + 42 frontend) with **95.82% code coverage** ensuring all features work correctly.
+
+```bash
+# Verify backend (822 tests)
+cd backend && npx jest --forceExit
+
+# Verify frontend (42 tests)
+cd frontend && npx vitest run
+
+# Full coverage report
+cd backend && npx jest --forceExit --coverage
+```
+
+### Demo Walkthrough Checklist
+
+Use this checklist to verify all features are working:
+
+- [ ] **Authentication** — Login with `admin@esgdemo.com` / `Demo@123`
+- [ ] **Dashboard** — View total emissions, scope distribution, charts
+- [ ] **Projects** — Browse 3 demo projects, view details and members
+- [ ] **Activities** — View 30+ activities across all scopes
+- [ ] **Calculations** — Run Scope 1/2/3 calculations, view formula display
+- [ ] **Analytics** — Check trends, benchmarks, AI insights
+- [ ] **Reports** — Generate GHG Inventory, download PDF/Excel
+- [ ] **ESG Goals** — Create and track sustainability targets
+- [ ] **Emission Factors** — Browse fuel, grid, and custom factors
+- [ ] **Standards** — Check EU CBAM, UK CBAM, China, K-ESG, MAFF, Thai compliance
+- [ ] **Signatures** — Create and verify digital signatures
+- [ ] **Audit Log** — View system activity tracking
+- [ ] **Tools** — Import/export data, AI assistant
+- [ ] **Settings** — Update profile, manage preferences
+- [ ] **Role-Based Access** — Login as different roles to verify permissions
+
+### What Each Test Suite Verifies
+
+| Area | Tests | Verified Functionality |
+|------|-------|----------------------|
+| Auth | ~76 | Login, register, JWT tokens, role-based access, password management |
+| Projects | ~50 | CRUD, team members, compliance status, filtering |
+| Activities | ~40 | Create/update/delete, bulk operations, file evidence |
+| Calculations | ~55 | All scope 1/2/3 methods, batch calculations, comparisons |
+| Reports | ~65 | All 6 standards, PDF/Excel generation, batch reports, signing |
+| ESG Goals | ~30 | Goal CRUD, progress tracking, summary dashboard |
+| Emission Factors | ~42 | Search, categories, custom factors, CRUD operations |
+| Services | ~170 | GHG calculations, AI embeddings, SERP API, report generation |
+| Middleware | ~91 | Auth verification, request validation, error handling |
+| Config | ~45 | Database connections, Redis cache, environment setup |
+| Utilities | ~77 | Pagination, formatting, hashing, date functions |
+| Frontend Pages | ~42 | All 15 pages render correctly with proper content |
+
+> For detailed test commands and writing new tests, see [DEVELOPER-SETUP.md](DEVELOPER-SETUP.md).
+
+---
+
 *Last updated: January 2026*

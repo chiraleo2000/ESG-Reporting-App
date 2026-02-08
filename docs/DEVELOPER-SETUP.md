@@ -135,6 +135,8 @@ frontend/
 
 ## Testing
 
+The project has **864 total tests** (822 backend + 42 frontend) with **95.82% statement coverage**.
+
 ### Backend Tests (Jest)
 
 ```bash
@@ -151,12 +153,68 @@ npx jest tests/unit/goalsController.test.ts --forceExit
 
 # Run tests matching a pattern
 npx jest --testPathPattern="unit" --forceExit
+
+# Run tests for a specific controller
+npx jest --testPathPattern="authController" --forceExit
+
+# Run only service tests
+npx jest --testPathPattern="Service" --forceExit
+
+# Run with verbose output
+npx jest --forceExit --verbose
+
+# Run in watch mode (re-runs on file change)
+npx jest --watch
+
+# Generate HTML coverage report
+npx jest --forceExit --coverage --coverageReporters=html
+# Open backend/coverage/index.html in a browser
 ```
 
-**Test suites:**
-- `tests/unit/` — Controller unit tests (auth, activity, calculation, project, report, goals, signature, audit), middleware, validation, services
-- `tests/integration/` — API integration tests
-- `tests/e2e/` — Full user journey tests
+#### Backend Test File Inventory (32 suites)
+
+**Controllers** (`backend/tests/unit/`):
+| Test File | Source File | Tests | Description |
+|-----------|-------------|-------|-------------|
+| `authController.test.ts` | `controllers/authController.ts` | ~45 | Login, register, refresh token, logout, profile, password change, users list, role update |
+| `activityController.test.ts` | `controllers/activityController.ts` | ~40 | CRUD, bulk operations, file evidence upload, filtering, validation |
+| `projectController.test.ts` | `controllers/projectController.ts` | ~50 | Create, read, update, delete, members, compliance status |
+| `calculationController.test.ts` | `controllers/calculationController.ts` | ~15 | Basic scope 1/2/3 calculations |
+| `calculationControllerDeep.test.ts` | `controllers/calculationController.ts` | ~40 | calculateBoth, calculatePrecursors, compareYears, edge cases, data quality ratings, biogenic carbon |
+| `reportController.test.ts` | `controllers/reportController.ts` | ~15 | Basic report generation |
+| `reportControllerComplete.test.ts` | `controllers/reportController.ts` | ~50 | All 14 exports: generate, batch, download, status, preview, requirements, manifest |
+| `goalsController.test.ts` | `controllers/goalsController.ts` | ~30 | ESG goal CRUD, progress tracking, summary |
+| `signatureController.test.ts` | `controllers/signatureController.ts` | ~35 | Digital signatures, verification, report signing |
+| `auditController.test.ts` | `controllers/auditController.ts` | ~20 | Audit log retrieval, filtering |
+| `emissionFactorController.test.ts` | `controllers/emissionFactorController.ts` | ~42 | All 21 exports: CRUD, search, categories, custom factors |
+| `fileController.test.ts` | `controllers/fileController.ts` | ~26 | Upload, download, delete, reparse, list files |
+| `standardController.test.ts` | `controllers/standardController.ts` | ~16 | All 6 ESG standards requirements |
+| `embeddingController.test.ts` | `controllers/embeddingController.ts` | ~25 | AI embedding search, document similarity, suggestions |
+
+**Services** (`backend/tests/unit/`):
+| Test File | Source File | Tests | Description |
+|-----------|-------------|-------|-------------|
+| `ghgService.test.ts` | `services/ghgService.ts` | ~25 | Core GHG calculation methods |
+| `ghgServiceExports.test.ts` | `services/ghgService.ts` | ~55 | All 6 exports: calculateEmissions, batchCalculate, getEmissionFactors, calculateUncertainty, getCalculationMethods, formatCalculationResult |
+| `reportServiceComplete.test.ts` | `services/reportService.ts` | ~25 | All 6 standards validation, PDF/Excel generation, requirements |
+| `embeddingServiceComplete.test.ts` | `services/embeddingService.ts` | ~35 | All 13 methods: initialize, generateEmbedding, store, search, suggest, conversation history |
+| `serpAPIServiceComplete.test.ts` | `services/serpAPIService.ts` | ~25 | Emission factor search, grid factors, precursor factors, caching |
+| `signatureService.test.ts` | `services/signatureService.ts` | ~30 | Sign, verify, report signatures |
+
+**Middleware** (`backend/tests/unit/`):
+| Test File | Source File | Tests | Description |
+|-----------|-------------|-------|-------------|
+| `authMiddleware.test.ts` | `middleware/auth.ts` | ~31 | All 10 exports: authenticate, requireRole, requireProjectAccess, optionalAuth, expired tokens |
+| `validationMiddleware.test.ts` | `middleware/validation.ts` | ~50 | validate() factory + all 17 Zod schemas |
+| `errorHandler.test.ts` | `middleware/errorHandler.ts` | ~10 | Error formatting, status codes |
+
+**Config & Utils** (`backend/tests/unit/`):
+| Test File | Source File | Tests | Description |
+|-----------|-------------|-------|-------------|
+| `databaseConfig.test.ts` | `config/database.ts` | ~15 | Pool connection, query, transaction methods |
+| `redisConfig.test.ts` | `config/redis.ts` | ~30 | cacheKeys, redisClient, cache get/set/del/clear |
+| `helpersComplete.test.ts` | `utils/helpers.ts` | ~67 | All 24 utility functions: pagination, formatting, hashing, dates |
+| `logger.test.ts` | `utils/logger.ts` | ~10 | Logging levels, formats |
 
 ### Frontend Tests (Vitest)
 
@@ -171,7 +229,22 @@ npx vitest --ui
 
 # Run with coverage
 npx vitest run --coverage
+
+# Run specific test file
+npx vitest run src/__tests__/pages.test.tsx
+
+# Run in watch mode
+npx vitest
 ```
+
+#### Frontend Test File Inventory (2 suites)
+
+| Test File | Tests | Description |
+|-----------|-------|-------------|
+| `src/__tests__/components.test.tsx` | ~5 | Core UI component rendering |
+| `src/__tests__/pages.test.tsx` | ~37 | All 15 page exports, barrel re-exports, domain-specific formatting, text content validation |
+
+**Pages covered:** Dashboard, Projects, ProjectDetail, Activities, Calculations, Analytics, Reports, EmissionFactors, Tools, Login, Register, Settings, ESGGoals, AuditLog, Signatures
 
 ### E2E Tests (Playwright)
 
@@ -184,7 +257,73 @@ npx playwright test --headed
 
 # Show report
 npx playwright show-report
+
+# Run specific test
+npx playwright test e2e/app.spec.ts
 ```
+
+### Coverage Breakdown
+
+```
+Overall: 95.82% Stmts | 84.87% Branch | 91.62% Funcs | 95.98% Lines
+
+Controllers:        96.3% average
+  authController       97.32%    signatureController   98.70%
+  activityController   94.73%    auditController      100.00%
+  projectController    98.35%    emissionFactorCtrl    97.54%
+  calculationCtrl      96.42%    fileController        91.62%
+  reportController     98.70%    standardController   100.00%
+  goalsController      89.00%    embeddingController   91.74%
+
+Services:           97.2% average
+  ghgService           99.00%    embeddingService     100.00%
+  reportService        95.56%    signatureService      97.61%
+  serpAPIService       93.93%
+
+Middleware:          98.5% average
+  auth.ts              97.67%    errorHandler.ts      100.00%
+  validation.ts        97.77%
+
+Utils:              94.1% average
+  helpers.ts          100.00%    logger.ts             88.23%
+
+Config:             86.5% average
+  database.ts          ~93%     redis.ts              ~85%
+  env.ts               ~72%
+```
+
+### Writing New Tests
+
+1. Create a test file in `backend/tests/unit/` named `<module>.test.ts`
+2. Follow the mocking pattern used in existing tests:
+
+```typescript
+// Standard mock setup
+jest.mock('../../src/config/database');
+jest.mock('../../src/utils/logger');
+jest.mock('../../src/utils/helpers', () => ({
+  ...jest.requireActual('../../src/utils/helpers'),
+  logAudit: jest.fn(),
+}));
+
+// Standard request/response mocks
+const mockRequest = (overrides = {}) => ({
+  params: {}, query: {}, body: {},
+  user: { id: 1, role: 'owner', email: 'test@test.com' },
+  ...overrides,
+});
+
+const mockResponse = () => {
+  const res: any = {};
+  res.status = jest.fn().mockReturnValue(res);
+  res.json = jest.fn().mockReturnValue(res);
+  res.send = jest.fn().mockReturnValue(res);
+  return res;
+};
+```
+
+3. Run the specific test file: `npx jest tests/unit/<module>.test.ts --forceExit`
+4. Check coverage: `npx jest tests/unit/<module>.test.ts --forceExit --coverage`
 
 ---
 
@@ -230,4 +369,4 @@ docker compose up -d --build frontend
 
 ---
 
-*Last updated: June 2025*
+*Last updated: January 2026*

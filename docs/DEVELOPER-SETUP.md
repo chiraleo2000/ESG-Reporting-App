@@ -133,6 +133,61 @@ frontend/
 
 ---
 
+## Testing
+
+### Backend Tests (Jest)
+
+```bash
+cd backend
+
+# Run all tests
+npx jest --forceExit
+
+# Run with coverage report
+npx jest --forceExit --coverage
+
+# Run a single test file
+npx jest tests/unit/goalsController.test.ts --forceExit
+
+# Run tests matching a pattern
+npx jest --testPathPattern="unit" --forceExit
+```
+
+**Test suites:**
+- `tests/unit/` — Controller unit tests (auth, activity, calculation, project, report, goals, signature, audit), middleware, validation, services
+- `tests/integration/` — API integration tests
+- `tests/e2e/` — Full user journey tests
+
+### Frontend Tests (Vitest)
+
+```bash
+cd frontend
+
+# Run all tests
+npx vitest run
+
+# Run with UI
+npx vitest --ui
+
+# Run with coverage
+npx vitest run --coverage
+```
+
+### E2E Tests (Playwright)
+
+```bash
+# From project root (requires running app)
+npx playwright test
+
+# With headed browser
+npx playwright test --headed
+
+# Show report
+npx playwright show-report
+```
+
+---
+
 ## Useful Commands
 
 ```bash
@@ -175,4 +230,4 @@ docker compose up -d --build frontend
 
 ---
 
-*Last updated: January 2026*
+*Last updated: June 2025*

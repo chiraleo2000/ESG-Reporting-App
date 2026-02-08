@@ -784,4 +784,102 @@ curl -X POST http://localhost:2047/api/v1/activities \
 
 ---
 
-*Last updated: January 2026*
+## ESG Goals
+
+### Create Goal
+
+```http
+POST /goals/project/:projectId
+```
+
+**Request Body:**
+```json
+{
+  "name": "Reduce Scope 1 by 30%",
+  "description": "Reduce direct emissions 30% vs 2024 baseline",
+  "category": "emission_reduction",
+  "targetType": "percentage",
+  "targetValue": 30,
+  "baselineValue": 50000,
+  "startDate": "2025-01-01",
+  "targetDate": "2030-12-31",
+  "scope": "scope1",
+  "standard": "eu_cbam",
+  "priority": "high"
+}
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "goal_abc123",
+    "name": "Reduce Scope 1 by 30%",
+    "status": "not_started",
+    "progress": 0
+  }
+}
+```
+
+### List Project Goals
+
+```http
+GET /goals/project/:projectId?page=1&limit=20&status=in_progress&category=emission_reduction
+```
+
+### Get Goal Details
+
+```http
+GET /goals/:id
+```
+
+### Update Goal
+
+```http
+PUT /goals/:id
+```
+
+### Delete Goal
+
+```http
+DELETE /goals/:id
+```
+
+### Update Goal Progress
+
+```http
+PATCH /goals/:id/progress
+```
+
+**Request Body:**
+```json
+{
+  "currentValue": 40000,
+  "notes": "Q1 2025 reduction achieved"
+}
+```
+
+### Get Goal Summary
+
+```http
+GET /goals/project/:projectId/summary
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "totalGoals": 5,
+    "byStatus": { "in_progress": 3, "completed": 1, "not_started": 1 },
+    "byCategory": { "emission_reduction": 3, "energy_efficiency": 2 },
+    "averageProgress": 42.5,
+    "upcomingDeadlines": []
+  }
+}
+```
+
+---
+
+*Last updated: June 2025*

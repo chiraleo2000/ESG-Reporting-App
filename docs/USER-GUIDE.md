@@ -31,20 +31,21 @@ Complete guide for using the ESG Reporting Application.
 
 | Email | Password | Role |
 |-------|----------|------|
-| admin@esgdemo.com | Demo@123 | Administrator |
-| manager@esgdemo.com | Demo@123 | Project Editor |
-| viewer@esgdemo.com | Demo@123 | Read Only |
-| auditor@esgdemo.com | Demo@123 | Auditor |
-| demo@esgdemo.com | Demo@123 | Clean User (no data) |
+| admin@esgdemo.com | Demo@123 | Owner (Full admin) |
+| director@esgdemo.com | Demo@123 | Director (Sign reports) |
+| auditor@esgdemo.com | Demo@123 | Auditor (Verify & sign) |
+| editor@esgdemo.com | Demo@123 | Editor (Create & edit) |
+| viewer@esgdemo.com | Demo@123 | Viewer (Read only) |
 
 ### User Roles
 
 | Role | Permissions |
 |------|-------------|
-| **Admin** | Full access, user management, system settings |
-| **Editor** | Create/edit projects, activities, reports |
+| **Owner** | Full access, user management, project deletion, digital signatures |
+| **Director** | Create/edit projects, sign reports, manage members |
+| **Auditor** | View data, add audit comments, verify & sign reports |
+| **Editor** | Create/edit projects, activities, generate reports |
 | **Viewer** | Read-only access to all data |
-| **Auditor** | View data, add audit comments, digital signatures |
 
 ---
 
@@ -246,6 +247,46 @@ Each insight includes:
 - Estimated impact
 - Confidence score
 - Implementation difficulty
+
+---
+
+## ESG Goals
+
+Track sustainability targets and measure progress toward emission reduction commitments.
+
+### Creating a Goal
+
+1. Navigate to the **ESG Goals** page from the sidebar
+2. Click **Create Goal**
+3. Fill in the form:
+   - **Name** — e.g., "Reduce Scope 1 by 30%"
+   - **Category** — emission_reduction, energy_efficiency, renewable_energy, waste_reduction, water_conservation, other
+   - **Target Type** — absolute or percentage
+   - **Target Value** — The target reduction number
+   - **Baseline Value** — Starting measurement
+   - **Scope** — scope1, scope2, scope3, or all
+   - **Standard** — Link to a reporting standard (EU CBAM, K-ESG, etc.)
+   - **Priority** — low, medium, high, critical
+   - **Start/Target Date** — Timeline for achievement
+
+### Goal Status Workflow
+
+`not_started` → `in_progress` → `completed` / `cancelled`
+
+### Updating Progress
+
+- Click a goal to open details
+- Click **Update Progress** to set the current value
+- Progress percentage is calculated automatically
+- Add notes for audit trail
+
+### Goal Summary Dashboard
+
+The summary view shows:
+- Total goals by status (pie chart)
+- Average progress across all goals
+- Goals by category breakdown
+- Upcoming deadlines
 
 ---
 

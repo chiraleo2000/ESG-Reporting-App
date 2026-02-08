@@ -87,6 +87,16 @@ const mainNavItems: NavItem[] = [
       { name: 'Scheduled', path: '/reports/scheduled', icon: Bell },
     ]
   },
+  {
+    name: 'ESG Goals',
+    path: '/goals',
+    icon: Target,
+    badge: 'New',
+    children: [
+      { name: 'All Goals', path: '/goals', icon: Target },
+      { name: 'Progress', path: '/goals/progress', icon: TrendingUp },
+    ]
+  },
 ];
 
 const analyticsNavItems: NavItem[] = [

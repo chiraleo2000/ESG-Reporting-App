@@ -189,7 +189,7 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
   const userId = req.user!.id;
 
   const result = await db.query(
-    `SELECT id, email, name, company, role, created_at, updated_at, last_login
+    `SELECT id, email, name, organization as company, role, created_at, updated_at, last_login_at as last_login
      FROM users WHERE id = $1`,
     [userId]
   );
@@ -223,9 +223,9 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
   const { name, company } = req.body;
 
   const result = await db.query(
-    `UPDATE users SET name = COALESCE($1, name), company = COALESCE($2, company), updated_at = NOW()
+    `UPDATE users SET name = COALESCE($1, name), organization = COALESCE($2, organization), updated_at = NOW()
      WHERE id = $3
-     RETURNING id, email, name, company, role, created_at, updated_at`,
+     RETURNING id, email, name, organization as company, role, created_at, updated_at`,
     [name, company, userId]
   );
 
@@ -322,7 +322,7 @@ export async function getUsers(req: Request, res: Response): Promise<void> {
   // Get users
   params.push(Number(limit), offset);
   const result = await db.query(
-    `SELECT id, email, name, company, role, is_active, created_at, last_login
+    `SELECT id, email, name, organization as company, role, is_active, created_at, last_login_at as last_login
      FROM users ${whereClause}
      ORDER BY created_at DESC
      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
@@ -354,7 +354,7 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
          is_active = COALESCE($2, is_active),
          updated_at = NOW()
      WHERE id = $3
-     RETURNING id, email, name, company, role, is_active, created_at, updated_at`,
+     RETURNING id, email, name, organization as company, role, is_active, created_at, updated_at`,
     [role, isActive, id]
   );
 

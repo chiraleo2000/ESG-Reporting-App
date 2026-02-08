@@ -202,30 +202,30 @@ export const activitiesApi = {
 // Calculations API
 export const calculationsApi = {
   // Calculate all activities for a project
-  calculateAll: async (projectId: string) => apiFetch(`/calculations/project/${projectId}/all`, {
+  calculateAll: async (projectId: string) => apiFetch(`/calculate/project/${projectId}/all`, {
     method: 'POST',
   }),
   // Calculate a specific activity
-  calculateActivity: async (projectId: string, activityId: string) => apiFetch(`/calculations/activity/${projectId}/${activityId}`, {
+  calculateActivity: async (projectId: string, activityId: string) => apiFetch(`/calculate/activity/${projectId}/${activityId}`, {
     method: 'POST',
   }),
   // Get project totals (scope 1/2/3 breakdown)
-  getTotals: async (projectId: string) => apiFetch(`/calculations/project/${projectId}/totals`),
+  getTotals: async (projectId: string) => apiFetch(`/calculate/project/${projectId}/totals`),
   // Calculate CFP for project
-  calculateCFP: async (projectId: string, options?: any) => apiFetch(`/calculations/project/${projectId}/cfp`, {
+  calculateCFP: async (projectId: string, options?: any) => apiFetch(`/calculate/project/${projectId}/cfp`, {
     method: 'POST',
     body: JSON.stringify(options || {}),
   }),
   // Calculate CFO for project
-  calculateCFO: async (projectId: string, options?: any) => apiFetch(`/calculations/project/${projectId}/cfo`, {
+  calculateCFO: async (projectId: string, options?: any) => apiFetch(`/calculate/project/${projectId}/cfo`, {
     method: 'POST',
     body: JSON.stringify(options || {}),
   }),
   // Legacy: calculate (alias for calculateAll)
-  calculate: async (projectId: string) => apiFetch(`/calculations/project/${projectId}/all`, {
+  calculate: async (projectId: string) => apiFetch(`/calculate/project/${projectId}/all`, {
     method: 'POST',
   }),
-  getHistory: async (projectId: string) => apiFetch(`/calculations/project/${projectId}/history`),
+  getHistory: async (projectId: string) => apiFetch(`/calculate/project/${projectId}/history`),
 };
 
 // Reports API
@@ -414,6 +414,52 @@ export const standardsApi = {
     }),
 };
 
+// ESG Goals API
+export const goalsApi = {
+  // Get all goals for a project
+  getAll: async (projectId: string, params?: { status?: string; category?: string; scope?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.category) queryParams.append('category', params.category);
+    if (params?.scope) queryParams.append('scope', params.scope);
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
+    return apiFetch(`/goals/project/${projectId}${query}`);
+  },
+
+  // Get goals summary
+  getSummary: async (projectId: string) => apiFetch(`/goals/project/${projectId}/summary`),
+
+  // Get single goal
+  getById: async (projectId: string, goalId: string) => apiFetch(`/goals/project/${projectId}/${goalId}`),
+
+  // Create a goal
+  create: async (projectId: string, data: any) => apiFetch(`/goals/project/${projectId}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+
+  // Update a goal
+  update: async (projectId: string, goalId: string, data: any) => apiFetch(`/goals/project/${projectId}/${goalId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+
+  // Update goal progress from emissions
+  updateProgress: async (projectId: string, goalId: string) => apiFetch(`/goals/project/${projectId}/${goalId}/progress`, {
+    method: 'POST',
+  }),
+
+  // Bulk update all goals progress
+  bulkUpdateProgress: async (projectId: string) => apiFetch(`/goals/project/${projectId}/bulk-progress`, {
+    method: 'POST',
+  }),
+
+  // Delete a goal
+  delete: async (projectId: string, goalId: string) => apiFetch(`/goals/project/${projectId}/${goalId}`, {
+    method: 'DELETE',
+  }),
+};
+
 // Health check
 export const healthCheck = async (): Promise<boolean> => {
   try {
@@ -436,5 +482,6 @@ export default {
   auditLogs: auditLogsApi,
   signatures: signaturesApi,
   standards: standardsApi,
+  goals: goalsApi,
   healthCheck,
 };

@@ -46,6 +46,7 @@ export async function createActivity(req: Request, res: Response): Promise<void>
     dataSource,
     dataQualityScore,
     metadata,
+    year,
   } = req.body;
 
   const activityId = generateId();
@@ -58,10 +59,10 @@ export async function createActivity(req: Request, res: Response): Promise<void>
   const result = await db.query(
     `INSERT INTO activities (
       id, project_id, name, description, scope, scope3_category,
-      activity_type, quantity, unit, source, tier_level, tier_direction,
-      data_source, data_quality_score, metadata
+      activity_type, activity_data, activity_unit, quantity, unit, source, tier_level, tier_direction,
+      data_source, data_quality_score, metadata, year, created_by
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
     RETURNING *`,
     [
       activityId,
@@ -71,6 +72,8 @@ export async function createActivity(req: Request, res: Response): Promise<void>
       scope,
       scope3Category || null,
       activityType,
+      quantity || 0,
+      unit || 'unit',
       quantity,
       unit,
       source || null,
@@ -79,6 +82,8 @@ export async function createActivity(req: Request, res: Response): Promise<void>
       dataSource || null,
       dataQualityScore || null,
       metadata ? JSON.stringify(metadata) : null,
+      year || new Date().getFullYear(),
+      userId,
     ]
   );
 
@@ -308,10 +313,10 @@ export async function bulkCreateActivities(req: Request, res: Response): Promise
         const result = await client.query(
           `INSERT INTO activities (
             id, project_id, name, description, scope, scope3_category,
-            activity_type, quantity, unit, source, tier_level, tier_direction,
-            data_source, data_quality_score
+            activity_type, activity_data, activity_unit, quantity, unit, source, tier_level, tier_direction,
+            data_source, data_quality_score, year, created_by
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
           RETURNING *`,
           [
             activityId,
@@ -321,6 +326,8 @@ export async function bulkCreateActivities(req: Request, res: Response): Promise
             activity.scope,
             activity.scope3Category || null,
             activity.activityType,
+            activity.quantity || 0,
+            activity.unit || 'unit',
             activity.quantity,
             activity.unit,
             activity.source || null,
@@ -328,6 +335,8 @@ export async function bulkCreateActivities(req: Request, res: Response): Promise
             activity.tierDirection || 'both',
             activity.dataSource || null,
             activity.dataQualityScore || null,
+            activity.year || new Date().getFullYear(),
+            userId,
           ]
         );
         createdActivities.push(formatActivity(result.rows[0]));
@@ -520,6 +529,7 @@ export async function createActivityForProject(req: Request, res: Response): Pro
     dataSource,
     dataQualityScore,
     metadata,
+    year,
   } = req.body;
 
   // Verify project exists
@@ -538,10 +548,10 @@ export async function createActivityForProject(req: Request, res: Response): Pro
   const result = await db.query(
     `INSERT INTO activities (
       id, project_id, name, description, scope, scope3_category,
-      activity_type, quantity, unit, source, tier_level, tier_direction,
-      data_source, data_quality_score, metadata
+      activity_type, activity_data, activity_unit, quantity, unit, source, tier_level, tier_direction,
+      data_source, data_quality_score, metadata, year, created_by
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
     RETURNING *`,
     [
       activityId,
@@ -551,6 +561,8 @@ export async function createActivityForProject(req: Request, res: Response): Pro
       scope,
       scope3Category || null,
       activityType,
+      quantity || 0,
+      unit || 'unit',
       quantity,
       unit,
       source || null,
@@ -559,6 +571,8 @@ export async function createActivityForProject(req: Request, res: Response): Pro
       dataSource || null,
       dataQualityScore || null,
       metadata ? JSON.stringify(metadata) : null,
+      year || new Date().getFullYear(),
+      userId,
     ]
   );
 
@@ -585,7 +599,8 @@ export async function exportActivities(req: Request, res: Response): Promise<voi
   // Get all activities for the project
   const result = await db.query(
     `SELECT a.*, 
-            ef.source as ef_source, ef.factor_value as ef_factor
+            COALESCE(ef.source, a.emission_factor_source) as ef_source, 
+            COALESCE(ef.factor_value, a.emission_factor) as ef_factor
      FROM activities a
      LEFT JOIN emission_factors ef ON a.emission_factor_used = ef.id
      WHERE a.project_id = $1

@@ -21,6 +21,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - ./database/seed-sugar-factory.sql:/docker-entrypoint-initdb.d/03-seed-sugar-factory.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d esg_reporting"]
       interval: 10s
@@ -65,6 +66,7 @@ services:
       DATABASE_NAME: esg_reporting
       DATABASE_USER: postgres
       DATABASE_PASSWORD: postgres123
+      REDIS_URL: redis://redis:6379
       REDIS_HOST: redis
       REDIS_PORT: 6379
       JWT_SECRET: esg_jwt_secret_production_change_this
@@ -104,7 +106,7 @@ services:
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:2048/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:2048/"]
       interval: 30s
       timeout: 10s
       retries: 3

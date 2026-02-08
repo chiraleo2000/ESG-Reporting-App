@@ -11,6 +11,7 @@ import signatureRoutes from './signatureRoutes';
 import standardRoutes from './standardRoutes';
 import embeddingRoutes from './embeddingRoutes';
 import helpRoutes from './helpRoutes';
+import goalsRoutes from './goalsRoutes';
 
 const router = Router();
 const API_VERSION = '/v1';
@@ -30,6 +31,7 @@ router.use(`${API_VERSION}/audit-logs`, auditRoutes);
 router.use(`${API_VERSION}/signatures`, signatureRoutes);
 router.use(`${API_VERSION}/standards`, standardRoutes);
 router.use(`${API_VERSION}/embeddings`, embeddingRoutes);
+router.use(`${API_VERSION}/goals`, goalsRoutes);
 
 // API Info (versioned)
 router.get(`${API_VERSION}`, (req, res) => {
@@ -50,6 +52,7 @@ router.get(`${API_VERSION}`, (req, res) => {
       signatures: `${API_VERSION}/signatures`,
       standards: `${API_VERSION}/standards`,
       embeddings: `${API_VERSION}/embeddings`,
+      goals: `${API_VERSION}/goals`,
     },
     standards: ['EU CBAM', 'UK CBAM', 'China Carbon Market', 'Japan MAFF ESG', 'Korea K-ESG', 'Thailand Thai-ESG'],
   });

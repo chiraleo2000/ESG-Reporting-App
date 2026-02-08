@@ -105,12 +105,13 @@ export async function calculateActivity(req: Request, res: Response): Promise<vo
     `UPDATE activities SET
        calculation_status = 'calculated',
        total_emissions_kg_co2e = $1,
-       emission_factor_used = $2,
-       tier_level = $3,
+       emission_factor = $2,
+       emission_factor_source = $3,
+       tier_level = $4,
        calculated_at = NOW(),
        updated_at = NOW()
-     WHERE id = $4`,
-    [totalEmissions, JSON.stringify({ factor: emissionFactor, source: emissionFactorSource }), tier, activityId]
+     WHERE id = $5`,
+    [totalEmissions, emissionFactor, emissionFactorSource, tier, activityId]
   );
 
   await logAudit(userId, 'CALCULATE', 'activity', activityId, {
@@ -189,11 +190,12 @@ export async function calculateAllActivities(req: Request, res: Response): Promi
         `UPDATE activities SET
            calculation_status = 'calculated',
            total_emissions_kg_co2e = $1,
-           emission_factor_used = $2,
+           emission_factor = $2,
+           emission_factor_source = $3,
            calculated_at = NOW(),
            updated_at = NOW()
-         WHERE id = $3`,
-        [totalEmissions, JSON.stringify({ factor: lookupResult.factor, source: lookupResult.source }), activity.id]
+         WHERE id = $4`,
+        [totalEmissions, lookupResult.factor, lookupResult.source, activity.id]
       );
 
       results.calculated.push({
@@ -319,9 +321,9 @@ export async function calculateCFP(req: Request, res: Response): Promise<void> {
       id, project_id, product_name, functional_unit, production_volume,
       allocation_method, raw_materials_emissions, production_emissions,
       distribution_emissions, use_emissions, end_of_life_emissions,
-      cfp_total, cfp_per_unit, biogenic_carbon
+      cfp_total, cfp_per_unit, biogenic_carbon, year, calculated_by
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
     [
       cfpId,
       projectId,
@@ -337,6 +339,8 @@ export async function calculateCFP(req: Request, res: Response): Promise<void> {
       roundTo(totalEmissions, 4),
       roundTo(cfpPerUnit, 6),
       roundTo(biogenicCarbon, 4),
+      new Date().getFullYear(),
+      userId,
     ]
   );
 
@@ -441,9 +445,9 @@ export async function calculateCFO(req: Request, res: Response): Promise<void> {
       id, project_id, organization_name, reporting_year, consolidation_method,
       operational_boundary, scope1_emissions, scope2_location_emissions,
       scope2_market_emissions, scope3_upstream_emissions, scope3_downstream_emissions,
-      scope3_category_breakdown, cfo_total
+      scope3_category_breakdown, cfo_total, calculated_by
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
     [
       cfoId,
       projectId,
@@ -458,6 +462,7 @@ export async function calculateCFO(req: Request, res: Response): Promise<void> {
       roundTo(scopeEmissions.scope3Downstream, 4),
       JSON.stringify(scope3CategoryBreakdown),
       roundTo(cfoTotal, 4),
+      userId,
     ]
   );
 
@@ -757,15 +762,16 @@ export async function calculateBoth(req: Request, res: Response): Promise<void> 
       id, project_id, product_name, functional_unit, production_volume,
       allocation_method, raw_materials_emissions, production_emissions,
       distribution_emissions, use_emissions, end_of_life_emissions,
-      cfp_total, cfp_per_unit, biogenic_carbon
+      cfp_total, cfp_per_unit, biogenic_carbon, year, calculated_by
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
     [
       cfpId, projectId, productName || 'Product', functionalUnit || 'unit', productionVolume || 1,
       allocationMethod || 'mass', roundTo(lifecycleStages.rawMaterials, 4),
       roundTo(lifecycleStages.production, 4), roundTo(lifecycleStages.distribution, 4),
       roundTo(lifecycleStages.use, 4), roundTo(lifecycleStages.endOfLife, 4),
-      roundTo(cfpTotal, 4), roundTo(cfpPerUnit, 6), 0
+      roundTo(cfpTotal, 4), roundTo(cfpPerUnit, 6), 0,
+      new Date().getFullYear(), userId
     ]
   );
 
@@ -775,16 +781,16 @@ export async function calculateBoth(req: Request, res: Response): Promise<void> 
       id, project_id, organization_name, reporting_year, consolidation_method,
       operational_boundary, scope1_emissions, scope2_location_emissions,
       scope2_market_emissions, scope3_upstream_emissions, scope3_downstream_emissions,
-      scope3_category_breakdown, cfo_total
+      scope3_category_breakdown, cfo_total, calculated_by
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
     [
       cfoId, projectId, organizationName || 'Organization', reportingYear || new Date().getFullYear(),
       consolidationMethod || 'operational_control', operationalBoundary || 'all',
       roundTo(scopeEmissions.scope1, 4), roundTo(scopeEmissions.scope2Location, 4),
       roundTo(scopeEmissions.scope2Market, 4), roundTo(scopeEmissions.scope3Upstream, 4),
       roundTo(scopeEmissions.scope3Downstream, 4), JSON.stringify(scope3CategoryBreakdown),
-      roundTo(cfoTotal, 4)
+      roundTo(cfoTotal, 4), userId
     ]
   );
 

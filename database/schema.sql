@@ -138,18 +138,29 @@ CREATE TABLE activities (
   scope3_category scope3_category,
   activity_type VARCHAR(100) NOT NULL,
   
-  -- Activity data
+  -- Activity data (dual column support for API compatibility)
   activity_data DECIMAL(20, 6) NOT NULL,
   activity_unit VARCHAR(50) NOT NULL,
+  quantity DECIMAL(20, 6),
+  unit VARCHAR(50),
+  source VARCHAR(255),
   
   -- Emission factor
   emission_factor DECIMAL(20, 10),
   emission_factor_unit VARCHAR(50),
   emission_factor_source VARCHAR(255),
+  emission_factor_used UUID,  -- Will be linked to emission_factors via ALTER TABLE
   
   -- Calculation settings
   calculation_tier calculation_tier DEFAULT 'tier1',
   tier_multiplier DECIMAL(5, 2) DEFAULT 1.0,
+  tier_level VARCHAR(20) DEFAULT 'tier1',
+  tier_direction VARCHAR(20) DEFAULT 'upstream',
+  
+  -- Calculation results
+  calculation_status VARCHAR(20) DEFAULT 'pending',
+  total_emissions_kg_co2e DECIMAL(20, 6),
+  calculated_at TIMESTAMP,
   
   -- Location/time context
   facility VARCHAR(255),
@@ -164,6 +175,7 @@ CREATE TABLE activities (
   supplier_tier INTEGER, -- 1, 2, 3, etc. for supply chain depth
   
   -- Data quality
+  data_source VARCHAR(255),
   data_quality_score INTEGER CHECK (data_quality_score >= 1 AND data_quality_score <= 5),
   uncertainty_percentage DECIMAL(5, 2),
   verification_status VARCHAR(50) DEFAULT 'unverified',
@@ -198,12 +210,13 @@ CREATE TABLE emission_factors (
   -- Factor value
   factor_value DECIMAL(20, 10) NOT NULL,
   factor_unit VARCHAR(50) NOT NULL,
-  activity_unit VARCHAR(50) NOT NULL,
+  activity_unit VARCHAR(50),
   
   -- Source information
   source VARCHAR(255) NOT NULL,
   source_url VARCHAR(500),
   source_year INTEGER,
+  year INTEGER,
   
   -- Scope and region
   scope emission_scope,
@@ -218,6 +231,8 @@ CREATE TABLE emission_factors (
   data_quality VARCHAR(50),
   uncertainty_min DECIMAL(5, 2),
   uncertainty_max DECIMAL(5, 2),
+  gwp_reference VARCHAR(50),
+  is_verified BOOLEAN DEFAULT FALSE,
   
   -- Metadata
   gwp_values JSONB, -- CO2, CH4, N2O, etc.
@@ -246,13 +261,16 @@ CREATE TABLE grid_emission_factors (
   region VARCHAR(100),
   grid_name VARCHAR(255),
   
-  -- Emission factors
-  location_based_ef DECIMAL(20, 10) NOT NULL, -- kgCO2e/kWh
+  -- Emission factors (dual column names for compatibility)
+  location_based_ef DECIMAL(20, 10), -- kgCO2e/kWh
   market_based_ef DECIMAL(20, 10),
+  factor_location DECIMAL(20, 10), -- Alias for location_based_ef
+  factor_market DECIMAL(20, 10), -- Alias for market_based_ef
+  unit VARCHAR(50),
   
   -- Time period
   year INTEGER NOT NULL,
-  effective_date DATE NOT NULL,
+  effective_date DATE,
   expiry_date DATE,
   
   -- Source
@@ -261,6 +279,8 @@ CREATE TABLE grid_emission_factors (
   
   -- Metadata
   methodology VARCHAR(255),
+  uncertainty DECIMAL(5, 2),
+  is_verified BOOLEAN DEFAULT FALSE,
   notes TEXT,
   metadata JSONB DEFAULT '{}',
   is_active BOOLEAN DEFAULT TRUE,
@@ -283,13 +303,16 @@ CREATE INDEX idx_grid_ef_active ON grid_emission_factors(is_active);
 
 CREATE TABLE precursor_factors (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  material VARCHAR(100) NOT NULL,
+  material VARCHAR(100),
+  material_type VARCHAR(100),
   production_route VARCHAR(100) NOT NULL,
   
   -- Factor values
-  direct_emissions_factor DECIMAL(20, 10) NOT NULL, -- tCO2e/t product
+  direct_emissions_factor DECIMAL(20, 10), -- tCO2e/t product
   indirect_emissions_factor DECIMAL(20, 10),
   total_emissions_factor DECIMAL(20, 10),
+  factor_kg_co2_per_kg DECIMAL(20, 10),
+  uncertainty DECIMAL(5, 2),
   
   -- Electricity consumption
   electricity_consumption DECIMAL(20, 10), -- MWh/t
@@ -297,12 +320,16 @@ CREATE TABLE precursor_factors (
   -- Source and validity
   source VARCHAR(255) NOT NULL,
   source_url VARCHAR(500),
-  valid_from DATE NOT NULL,
+  valid_from DATE,
   valid_to DATE,
+  year INTEGER,
   
   -- Regional specifics
   region VARCHAR(100),
   country VARCHAR(100),
+  
+  -- CBAM specific
+  cbam_applicable BOOLEAN DEFAULT TRUE,
   
   -- Metadata
   cn_codes VARCHAR(20)[], -- Combined Nomenclature codes
@@ -313,9 +340,7 @@ CREATE TABLE precursor_factors (
   
   created_by UUID REFERENCES users(id),
   created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-  
-  CONSTRAINT unique_precursor UNIQUE (material, production_route, region, valid_from)
+  updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX idx_precursor_material ON precursor_factors(material);
@@ -1085,3 +1110,335 @@ ON CONFLICT (name) DO NOTHING;
 
 -- Example: GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO esg_app_user;
 -- Example: GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO esg_app_user;
+
+-- ============================================
+-- COMPATIBILITY COLUMNS (Controller<->Schema alignment)
+-- ============================================
+
+-- Projects: Add columns expected by controllers
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS company VARCHAR(255);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS facility_name VARCHAR(255);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS facility_location VARCHAR(255);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS reporting_standards report_standard[] DEFAULT '{}';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS default_standard VARCHAR(50);
+
+-- Sync organization -> company on projects
+CREATE OR REPLACE FUNCTION sync_project_company()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.organization IS NOT NULL AND NEW.company IS NULL THEN
+    NEW.company = NEW.organization;
+  ELSIF NEW.company IS NOT NULL AND NEW.organization IS NULL THEN
+    NEW.organization = NEW.company;
+  END IF;
+  -- Sync standards arrays
+  IF NEW.standards IS NOT NULL AND (NEW.reporting_standards IS NULL OR array_length(NEW.reporting_standards, 1) IS NULL) THEN
+    NEW.reporting_standards = NEW.standards;
+  ELSIF NEW.reporting_standards IS NOT NULL AND (NEW.standards IS NULL OR array_length(NEW.standards, 1) IS NULL) THEN
+    NEW.standards = NEW.reporting_standards;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER sync_project_company_trigger
+  BEFORE INSERT OR UPDATE ON projects
+  FOR EACH ROW EXECUTE FUNCTION sync_project_company();
+
+-- Grid Emission Factors: Add factor_kg_co2_per_kwh column
+ALTER TABLE grid_emission_factors ADD COLUMN IF NOT EXISTS factor_kg_co2_per_kwh DECIMAL(20, 10);
+
+-- Sync location_based_ef -> factor_kg_co2_per_kwh
+CREATE OR REPLACE FUNCTION sync_grid_ef_factor()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.location_based_ef IS NOT NULL AND NEW.factor_kg_co2_per_kwh IS NULL THEN
+    NEW.factor_kg_co2_per_kwh = NEW.location_based_ef;
+  ELSIF NEW.factor_kg_co2_per_kwh IS NOT NULL AND NEW.location_based_ef IS NULL THEN
+    NEW.location_based_ef = NEW.factor_kg_co2_per_kwh;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER sync_grid_ef_trigger
+  BEFORE INSERT OR UPDATE ON grid_emission_factors
+  FOR EACH ROW EXECUTE FUNCTION sync_grid_ef_factor();
+
+-- Backfill factor_kg_co2_per_kwh from location_based_ef
+UPDATE grid_emission_factors SET factor_kg_co2_per_kwh = location_based_ef WHERE factor_kg_co2_per_kwh IS NULL AND location_based_ef IS NOT NULL;
+
+-- CFP Results: Add columns expected by calculationController
+ALTER TABLE cfp_results ADD COLUMN IF NOT EXISTS production_volume DECIMAL(20, 6);
+ALTER TABLE cfp_results ADD COLUMN IF NOT EXISTS allocation_method VARCHAR(100);
+ALTER TABLE cfp_results ADD COLUMN IF NOT EXISTS raw_materials_emissions DECIMAL(20, 6) DEFAULT 0;
+ALTER TABLE cfp_results ADD COLUMN IF NOT EXISTS production_emissions DECIMAL(20, 6) DEFAULT 0;
+ALTER TABLE cfp_results ADD COLUMN IF NOT EXISTS distribution_emissions DECIMAL(20, 6) DEFAULT 0;
+ALTER TABLE cfp_results ADD COLUMN IF NOT EXISTS use_emissions DECIMAL(20, 6) DEFAULT 0;
+ALTER TABLE cfp_results ADD COLUMN IF NOT EXISTS end_of_life_emissions DECIMAL(20, 6) DEFAULT 0;
+ALTER TABLE cfp_results ADD COLUMN IF NOT EXISTS cfp_total DECIMAL(20, 6);
+ALTER TABLE cfp_results ADD COLUMN IF NOT EXISTS cfp_per_unit DECIMAL(20, 10);
+ALTER TABLE cfp_results ADD COLUMN IF NOT EXISTS biogenic_carbon DECIMAL(20, 6) DEFAULT 0;
+
+-- Sync cfp_total <-> total_cfp
+CREATE OR REPLACE FUNCTION sync_cfp_totals()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.total_cfp IS NOT NULL AND NEW.cfp_total IS NULL THEN
+    NEW.cfp_total = NEW.total_cfp;
+  ELSIF NEW.cfp_total IS NOT NULL AND NEW.total_cfp IS NULL THEN
+    NEW.total_cfp = NEW.cfp_total;
+  END IF;
+  -- Sync lifecycle columns
+  IF NEW.raw_materials IS NOT NULL AND NEW.raw_materials_emissions IS NULL THEN
+    NEW.raw_materials_emissions = NEW.raw_materials;
+  ELSIF NEW.raw_materials_emissions IS NOT NULL AND NEW.raw_materials IS NULL THEN
+    NEW.raw_materials = NEW.raw_materials_emissions;
+  END IF;
+  IF NEW.manufacturing IS NOT NULL AND NEW.production_emissions IS NULL THEN
+    NEW.production_emissions = NEW.manufacturing;
+  ELSIF NEW.production_emissions IS NOT NULL AND NEW.manufacturing IS NULL THEN
+    NEW.manufacturing = NEW.production_emissions;
+  END IF;
+  IF NEW.transport IS NOT NULL AND NEW.distribution_emissions IS NULL THEN
+    NEW.distribution_emissions = NEW.transport;
+  ELSIF NEW.distribution_emissions IS NOT NULL AND NEW.transport IS NULL THEN
+    NEW.transport = NEW.distribution_emissions;
+  END IF;
+  IF NEW.use_phase IS NOT NULL AND NEW.use_emissions IS NULL THEN
+    NEW.use_emissions = NEW.use_phase;
+  ELSIF NEW.use_emissions IS NOT NULL AND NEW.use_phase IS NULL THEN
+    NEW.use_phase = NEW.use_emissions;
+  END IF;
+  IF NEW.end_of_life IS NOT NULL AND NEW.end_of_life_emissions IS NULL THEN
+    NEW.end_of_life_emissions = NEW.end_of_life;
+  ELSIF NEW.end_of_life_emissions IS NOT NULL AND NEW.end_of_life IS NULL THEN
+    NEW.end_of_life = NEW.end_of_life_emissions;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER sync_cfp_totals_trigger
+  BEFORE INSERT OR UPDATE ON cfp_results
+  FOR EACH ROW EXECUTE FUNCTION sync_cfp_totals();
+
+-- CFO Results: Add columns expected by calculationController
+ALTER TABLE cfo_results ADD COLUMN IF NOT EXISTS reporting_year INTEGER;
+ALTER TABLE cfo_results ADD COLUMN IF NOT EXISTS consolidation_method VARCHAR(100);
+ALTER TABLE cfo_results ADD COLUMN IF NOT EXISTS operational_boundary VARCHAR(100);
+ALTER TABLE cfo_results ADD COLUMN IF NOT EXISTS scope1_emissions DECIMAL(20, 6) DEFAULT 0;
+ALTER TABLE cfo_results ADD COLUMN IF NOT EXISTS scope2_location_emissions DECIMAL(20, 6) DEFAULT 0;
+ALTER TABLE cfo_results ADD COLUMN IF NOT EXISTS scope2_market_emissions DECIMAL(20, 6) DEFAULT 0;
+ALTER TABLE cfo_results ADD COLUMN IF NOT EXISTS scope3_upstream_emissions DECIMAL(20, 6) DEFAULT 0;
+ALTER TABLE cfo_results ADD COLUMN IF NOT EXISTS scope3_downstream_emissions DECIMAL(20, 6) DEFAULT 0;
+ALTER TABLE cfo_results ADD COLUMN IF NOT EXISTS scope3_category_breakdown JSONB DEFAULT '{}';
+ALTER TABLE cfo_results ADD COLUMN IF NOT EXISTS cfo_total DECIMAL(20, 6);
+
+-- Sync cfo columns
+CREATE OR REPLACE FUNCTION sync_cfo_totals()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Sync total
+  IF NEW.total_emissions IS NOT NULL AND NEW.cfo_total IS NULL THEN NEW.cfo_total = NEW.total_emissions;
+  ELSIF NEW.cfo_total IS NOT NULL AND NEW.total_emissions IS NULL THEN NEW.total_emissions = NEW.cfo_total; END IF;
+  -- Sync year
+  IF NEW.year IS NOT NULL AND NEW.reporting_year IS NULL THEN NEW.reporting_year = NEW.year;
+  ELSIF NEW.reporting_year IS NOT NULL AND NEW.year IS NULL THEN NEW.year = NEW.reporting_year; END IF;
+  -- Sync consolidation
+  IF NEW.consolidation_approach IS NOT NULL AND NEW.consolidation_method IS NULL THEN NEW.consolidation_method = NEW.consolidation_approach;
+  ELSIF NEW.consolidation_method IS NOT NULL AND NEW.consolidation_approach IS NULL THEN NEW.consolidation_approach = NEW.consolidation_method; END IF;
+  -- Sync boundary
+  IF NEW.reporting_boundary IS NOT NULL AND NEW.operational_boundary IS NULL THEN NEW.operational_boundary = NEW.reporting_boundary;
+  ELSIF NEW.operational_boundary IS NOT NULL AND NEW.reporting_boundary IS NULL THEN NEW.reporting_boundary = NEW.operational_boundary; END IF;
+  -- Sync scope columns
+  IF NEW.scope1_total IS NOT NULL AND NEW.scope1_emissions IS NULL THEN NEW.scope1_emissions = NEW.scope1_total;
+  ELSIF NEW.scope1_emissions IS NOT NULL AND NEW.scope1_total IS NULL THEN NEW.scope1_total = NEW.scope1_emissions; END IF;
+  IF NEW.scope2_location_based IS NOT NULL AND NEW.scope2_location_emissions IS NULL THEN NEW.scope2_location_emissions = NEW.scope2_location_based;
+  ELSIF NEW.scope2_location_emissions IS NOT NULL AND NEW.scope2_location_based IS NULL THEN NEW.scope2_location_based = NEW.scope2_location_emissions; END IF;
+  IF NEW.scope2_market_based IS NOT NULL AND NEW.scope2_market_emissions IS NULL THEN NEW.scope2_market_emissions = NEW.scope2_market_based;
+  ELSIF NEW.scope2_market_emissions IS NOT NULL AND NEW.scope2_market_based IS NULL THEN NEW.scope2_market_based = NEW.scope2_market_emissions; END IF;
+  IF NEW.scope3_upstream IS NOT NULL AND NEW.scope3_upstream_emissions IS NULL THEN NEW.scope3_upstream_emissions = NEW.scope3_upstream;
+  ELSIF NEW.scope3_upstream_emissions IS NOT NULL AND NEW.scope3_upstream IS NULL THEN NEW.scope3_upstream = NEW.scope3_upstream_emissions; END IF;
+  IF NEW.scope3_downstream IS NOT NULL AND NEW.scope3_downstream_emissions IS NULL THEN NEW.scope3_downstream_emissions = NEW.scope3_downstream;
+  ELSIF NEW.scope3_downstream_emissions IS NOT NULL AND NEW.scope3_downstream IS NULL THEN NEW.scope3_downstream = NEW.scope3_downstream_emissions; END IF;
+  IF NEW.scope3_by_category IS NOT NULL AND NEW.scope3_category_breakdown IS NULL THEN NEW.scope3_category_breakdown = NEW.scope3_by_category;
+  ELSIF NEW.scope3_category_breakdown IS NOT NULL AND NEW.scope3_by_category IS NULL THEN NEW.scope3_by_category = NEW.scope3_category_breakdown; END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER sync_cfo_totals_trigger
+  BEFORE INSERT OR UPDATE ON cfo_results
+  FOR EACH ROW EXECUTE FUNCTION sync_cfo_totals();
+
+-- Reports: Add columns expected by reportController
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS format VARCHAR(20) DEFAULT 'pdf';
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS file_path VARCHAR(1000);
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS batch_id UUID;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS signed_at TIMESTAMP;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS signed_by UUID REFERENCES users(id);
+
+CREATE INDEX IF NOT EXISTS idx_reports_batch_id ON reports(batch_id);
+
+-- ============================================
+-- MISSING TABLES (Required by controllers/services)
+-- ============================================
+
+-- Precursor Calculations Table (used by ghgService)
+CREATE TABLE IF NOT EXISTS precursor_calculations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  activity_id UUID NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+  precursor_type VARCHAR(100) NOT NULL,
+  quantity_kg DECIMAL(20, 6) NOT NULL,
+  emission_factor DECIMAL(20, 10) NOT NULL,
+  emissions_kg_co2e DECIMAL(20, 6) NOT NULL,
+  production_route VARCHAR(100),
+  source VARCHAR(255),
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_precursor_calc_activity ON precursor_calculations(activity_id);
+CREATE INDEX IF NOT EXISTS idx_precursor_calc_type ON precursor_calculations(precursor_type);
+
+-- CBAM Default Values Table (used by ghgService)
+CREATE TABLE IF NOT EXISTS cbam_default_values (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  goods_category VARCHAR(100) NOT NULL,
+  country VARCHAR(100),
+  direct_emissions DECIMAL(20, 10) NOT NULL,
+  indirect_emissions DECIMAL(20, 10) NOT NULL,
+  precursor_emissions DECIMAL(20, 10) DEFAULT 0,
+  source VARCHAR(255),
+  year INTEGER,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  CONSTRAINT unique_cbam_defaults UNIQUE (goods_category, country)
+);
+
+-- Grid EF Overrides Table (used by emissionFactorController)
+CREATE TABLE IF NOT EXISTS grid_ef_overrides (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  country VARCHAR(100) NOT NULL,
+  year INTEGER NOT NULL,
+  factor_kg_co2_per_kwh DECIMAL(20, 10) NOT NULL,
+  source VARCHAR(255),
+  justification TEXT,
+  created_by UUID REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  CONSTRAINT unique_grid_ef_override UNIQUE (project_id, country, year)
+);
+
+CREATE INDEX IF NOT EXISTS idx_grid_ef_overrides_project ON grid_ef_overrides(project_id);
+
+-- Precursor Factor Overrides Table (used by emissionFactorController)
+CREATE TABLE IF NOT EXISTS precursor_factor_overrides (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  material_type VARCHAR(100) NOT NULL,
+  production_route VARCHAR(100) NOT NULL,
+  factor_kg_co2_per_kg DECIMAL(20, 10) NOT NULL,
+  source VARCHAR(255),
+  justification TEXT,
+  created_by UUID REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  CONSTRAINT unique_precursor_override UNIQUE (project_id, material_type, production_route)
+);
+
+CREATE INDEX IF NOT EXISTS idx_precursor_overrides_project ON precursor_factor_overrides(project_id);
+
+-- ============================================
+-- ESG GOALS TABLE (New Feature)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS esg_goals (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  
+  -- Goal identification
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  category VARCHAR(100) NOT NULL DEFAULT 'emission_reduction',
+  -- categories: emission_reduction, energy_efficiency, renewable_energy, waste_reduction,
+  --             water_conservation, carbon_neutrality, scope_specific, custom
+  
+  -- Target definition
+  target_type VARCHAR(50) NOT NULL DEFAULT 'absolute',
+  -- types: absolute (tCO2e), percentage (% reduction), intensity (per unit)
+  scope VARCHAR(20), -- scope1, scope2, scope3, all
+  
+  baseline_value DECIMAL(20, 6) NOT NULL DEFAULT 0,
+  baseline_year INTEGER NOT NULL,
+  target_value DECIMAL(20, 6) NOT NULL,
+  target_year INTEGER NOT NULL,
+  target_unit VARCHAR(50) DEFAULT 'tCO2e',
+  
+  -- Progress tracking
+  current_value DECIMAL(20, 6) DEFAULT 0,
+  progress_percentage DECIMAL(5, 2) DEFAULT 0,
+  
+  -- Financial tracking
+  estimated_cost DECIMAL(20, 2),
+  actual_cost DECIMAL(20, 2),
+  cost_currency VARCHAR(10) DEFAULT 'USD',
+  estimated_savings DECIMAL(20, 2),
+  actual_savings DECIMAL(20, 2),
+  roi_percentage DECIMAL(10, 2),
+  
+  -- Status
+  status VARCHAR(50) DEFAULT 'active',
+  -- statuses: draft, active, on_track, at_risk, behind, achieved, cancelled
+  priority VARCHAR(20) DEFAULT 'medium',
+  -- priorities: low, medium, high, critical
+  
+  -- Milestones (JSON array of milestone objects)
+  milestones JSONB DEFAULT '[]',
+  
+  -- Responsible
+  assigned_to UUID REFERENCES users(id),
+  
+  -- Standard alignment (which ESG standards this goal aligns with)
+  aligned_standards report_standard[] DEFAULT '{}',
+  
+  -- Science-Based Targets alignment
+  sbti_aligned BOOLEAN DEFAULT FALSE,
+  paris_aligned BOOLEAN DEFAULT FALSE,
+  
+  -- Metadata
+  notes TEXT,
+  metadata JSONB DEFAULT '{}',
+  
+  created_by UUID NOT NULL REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  
+  CONSTRAINT valid_goal_years CHECK (target_year > baseline_year)
+);
+
+CREATE INDEX IF NOT EXISTS idx_esg_goals_project ON esg_goals(project_id);
+CREATE INDEX IF NOT EXISTS idx_esg_goals_category ON esg_goals(category);
+CREATE INDEX IF NOT EXISTS idx_esg_goals_status ON esg_goals(status);
+CREATE INDEX IF NOT EXISTS idx_esg_goals_scope ON esg_goals(scope);
+
+-- ESG Goals update trigger
+CREATE TRIGGER update_esg_goals_updated_at BEFORE UPDATE ON esg_goals 
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
+-- SEED CBAM DEFAULT VALUES
+-- ============================================
+
+INSERT INTO cbam_default_values (goods_category, country, direct_emissions, indirect_emissions, precursor_emissions, source, year)
+VALUES
+  ('cement', NULL, 0.525, 0.05, 0, 'EU CBAM Default', 2024),
+  ('iron_steel', NULL, 1.85, 0.2, 0.3, 'EU CBAM Default', 2024),
+  ('aluminum', NULL, 1.5, 8.5, 1.0, 'EU CBAM Default', 2024),
+  ('fertilizers', NULL, 1.6, 0.1, 0, 'EU CBAM Default', 2024),
+  ('electricity', NULL, 0, 0.42, 0, 'EU CBAM Default', 2024),
+  ('hydrogen', NULL, 9.0, 0.5, 0, 'EU CBAM Default', 2024)
+ON CONFLICT (goods_category, country) DO NOTHING;

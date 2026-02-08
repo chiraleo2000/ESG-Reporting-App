@@ -13,3 +13,4 @@ export { DataExport } from './DataExport';
 export { AIAssistant } from './AIAssistant';
 export { Analytics } from './Analytics';
 export { Calculations } from './Calculations';
+export { ESGGoals } from './ESGGoals';

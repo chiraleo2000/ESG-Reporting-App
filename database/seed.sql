@@ -419,16 +419,16 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO grid_emission_factors (id, country, region, year, factor_location, factor_market, unit, source, uncertainty, is_verified)
 VALUES
-  ('gef00000-0000-0000-0000-000000000001', 'Thailand', 'National', 2024, 0.4561, 0.4500, 'kgCO2e/kWh', 'TGO Thailand', 0.05, true),
-  ('gef00000-0000-0000-0000-000000000002', 'Thailand', 'National', 2023, 0.4658, 0.4600, 'kgCO2e/kWh', 'TGO Thailand', 0.05, true),
-  ('gef00000-0000-0000-0000-000000000003', 'China', 'North', 2024, 0.5810, 0.5700, 'kgCO2e/kWh', 'China MEE', 0.08, true),
-  ('gef00000-0000-0000-0000-000000000004', 'China', 'East', 2024, 0.5102, 0.5000, 'kgCO2e/kWh', 'China MEE', 0.08, true),
-  ('gef00000-0000-0000-0000-000000000005', 'Japan', 'National', 2024, 0.4570, 0.4500, 'kgCO2e/kWh', 'Japan MOE', 0.06, true),
-  ('gef00000-0000-0000-0000-000000000006', 'South Korea', 'National', 2024, 0.4590, 0.4500, 'kgCO2e/kWh', 'Korea MOE', 0.06, true),
-  ('gef00000-0000-0000-0000-000000000007', 'Germany', 'National', 2024, 0.3660, 0.3500, 'kgCO2e/kWh', 'UBA Germany', 0.05, true),
-  ('gef00000-0000-0000-0000-000000000008', 'United Kingdom', 'National', 2024, 0.2070, 0.2000, 'kgCO2e/kWh', 'DEFRA 2024', 0.04, true),
-  ('gef00000-0000-0000-0000-000000000009', 'United States', 'National', 2024, 0.3890, 0.3800, 'kgCO2e/kWh', 'US EPA', 0.07, true),
-  ('gef00000-0000-0000-0000-000000000010', 'European Union', 'Average', 2024, 0.2760, 0.2700, 'kgCO2e/kWh', 'EEA', 0.05, true)
+  ('aef00000-0000-0000-0000-000000000001', 'Thailand', 'National', 2024, 0.4561, 0.4500, 'kgCO2e/kWh', 'TGO Thailand', 0.05, true),
+  ('aef00000-0000-0000-0000-000000000002', 'Thailand', 'National', 2023, 0.4658, 0.4600, 'kgCO2e/kWh', 'TGO Thailand', 0.05, true),
+  ('aef00000-0000-0000-0000-000000000003', 'China', 'North', 2024, 0.5810, 0.5700, 'kgCO2e/kWh', 'China MEE', 0.08, true),
+  ('aef00000-0000-0000-0000-000000000004', 'China', 'East', 2024, 0.5102, 0.5000, 'kgCO2e/kWh', 'China MEE', 0.08, true),
+  ('aef00000-0000-0000-0000-000000000005', 'Japan', 'National', 2024, 0.4570, 0.4500, 'kgCO2e/kWh', 'Japan MOE', 0.06, true),
+  ('aef00000-0000-0000-0000-000000000006', 'South Korea', 'National', 2024, 0.4590, 0.4500, 'kgCO2e/kWh', 'Korea MOE', 0.06, true),
+  ('aef00000-0000-0000-0000-000000000007', 'Germany', 'National', 2024, 0.3660, 0.3500, 'kgCO2e/kWh', 'UBA Germany', 0.05, true),
+  ('aef00000-0000-0000-0000-000000000008', 'United Kingdom', 'National', 2024, 0.2070, 0.2000, 'kgCO2e/kWh', 'DEFRA 2024', 0.04, true),
+  ('aef00000-0000-0000-0000-000000000009', 'United States', 'National', 2024, 0.3890, 0.3800, 'kgCO2e/kWh', 'US EPA', 0.07, true),
+  ('aef00000-0000-0000-0000-000000000010', 'European Union', 'Average', 2024, 0.2760, 0.2700, 'kgCO2e/kWh', 'EEA', 0.05, true)
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================
@@ -437,28 +437,44 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO precursor_factors (id, material_type, production_route, factor_kg_co2_per_kg, uncertainty, source, region, year, cbam_applicable)
 VALUES
-  ('pf000000-0000-0000-0000-000000000001', 'Steel', 'Basic Oxygen Furnace', 1.85, 0.15, 'EU CBAM Default', 'Global', 2024, true),
-  ('pf000000-0000-0000-0000-000000000002', 'Steel', 'Electric Arc Furnace', 0.58, 0.10, 'EU CBAM Default', 'Global', 2024, true),
-  ('pf000000-0000-0000-0000-000000000003', 'Aluminum', 'Primary Production', 11.0, 1.5, 'EU CBAM Default', 'Global', 2024, true),
-  ('pf000000-0000-0000-0000-000000000004', 'Aluminum', 'Secondary Production', 0.6, 0.1, 'EU CBAM Default', 'Global', 2024, true),
-  ('pf000000-0000-0000-0000-000000000005', 'Cement', 'Standard Production', 0.525, 0.05, 'EU CBAM Default', 'Global', 2024, true),
-  ('pf000000-0000-0000-0000-000000000006', 'Ammonia', 'Steam Methane Reforming', 1.6, 0.2, 'EU CBAM Default', 'Global', 2024, true),
-  ('pf000000-0000-0000-0000-000000000007', 'Urea', 'Standard Production', 0.75, 0.1, 'EU CBAM Default', 'Global', 2024, true),
-  ('pf000000-0000-0000-0000-000000000008', 'Hydrogen', 'Grey (SMR)', 9.0, 1.0, 'IEA', 'Global', 2024, true),
-  ('pf000000-0000-0000-0000-000000000009', 'Hydrogen', 'Blue (SMR + CCS)', 4.5, 0.8, 'IEA', 'Global', 2024, true),
-  ('pf000000-0000-0000-0000-000000000010', 'Electricity', 'Grid Average', 0.42, 0.1, 'Global Average', 'Global', 2024, true)
+  ('bf000000-0000-0000-0000-000000000001', 'Steel', 'Basic Oxygen Furnace', 1.85, 0.15, 'EU CBAM Default', 'Global', 2024, true),
+  ('bf000000-0000-0000-0000-000000000002', 'Steel', 'Electric Arc Furnace', 0.58, 0.10, 'EU CBAM Default', 'Global', 2024, true),
+  ('bf000000-0000-0000-0000-000000000003', 'Aluminum', 'Primary Production', 11.0, 1.5, 'EU CBAM Default', 'Global', 2024, true),
+  ('bf000000-0000-0000-0000-000000000004', 'Aluminum', 'Secondary Production', 0.6, 0.1, 'EU CBAM Default', 'Global', 2024, true),
+  ('bf000000-0000-0000-0000-000000000005', 'Cement', 'Standard Production', 0.525, 0.05, 'EU CBAM Default', 'Global', 2024, true),
+  ('bf000000-0000-0000-0000-000000000006', 'Ammonia', 'Steam Methane Reforming', 1.6, 0.2, 'EU CBAM Default', 'Global', 2024, true),
+  ('bf000000-0000-0000-0000-000000000007', 'Urea', 'Standard Production', 0.75, 0.1, 'EU CBAM Default', 'Global', 2024, true),
+  ('bf000000-0000-0000-0000-000000000008', 'Hydrogen', 'Grey (SMR)', 9.0, 1.0, 'IEA', 'Global', 2024, true),
+  ('bf000000-0000-0000-0000-000000000009', 'Hydrogen', 'Blue (SMR + CCS)', 4.5, 0.8, 'IEA', 'Global', 2024, true),
+  ('bf000000-0000-0000-0000-000000000010', 'Electricity', 'Grid Average', 0.42, 0.1, 'Global Average', 'Global', 2024, true)
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================
 -- UPDATE ACTIVITY CALCULATION STATUS
 -- Mark activities as calculated with proper emissions
+-- Also sync quantity/unit from activity_data/activity_unit for API compatibility
 -- ============================================
 
 UPDATE activities SET
   calculation_status = 'calculated',
   total_emissions_kg_co2e = activity_data * emission_factor,
-  calculated_at = NOW()
+  calculated_at = NOW(),
+  quantity = activity_data,
+  unit = activity_unit,
+  tier_level = calculation_tier::text,
+  tier_direction = COALESCE(direction, 'upstream'),
+  source = emission_factor_source,
+  data_source = emission_factor_source
 WHERE emission_factor IS NOT NULL;
+
+-- Update remaining activities without emission factors
+UPDATE activities SET
+  calculation_status = 'pending',
+  quantity = activity_data,
+  unit = activity_unit,
+  tier_level = calculation_tier::text,
+  tier_direction = COALESCE(direction, 'upstream')
+WHERE emission_factor IS NULL AND calculation_status IS NULL;
 
 -- ============================================
 -- SUMMARY STATISTICS

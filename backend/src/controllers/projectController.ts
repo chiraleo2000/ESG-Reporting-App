@@ -583,7 +583,7 @@ export async function cloneProject(req: Request, res: Response): Promise<void> {
     `INSERT INTO projects (
       id, name, description, company, facility_name, facility_location,
       industry, reporting_standards, default_standard, baseline_year, 
-      reporting_year, owner_id
+      reporting_year, created_by
     )
     SELECT $1, $2, description, company, facility_name, facility_location,
            industry, reporting_standards, default_standard, baseline_year,

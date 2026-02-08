@@ -15,7 +15,8 @@ import {
   DataExport,
   AIAssistant,
   Analytics,
-  Calculations
+  Calculations,
+  ESGGoals
 } from '@/pages';
 import { ToastProvider } from '@/components/ui/Toast';
 import { useThemeStore } from '@/store/themeStore';
@@ -110,6 +111,8 @@ const App: React.FC = () => {
             <Route path="calculations/*" element={<Calculations />} />
             <Route path="reports" element={<Reports />} />
             <Route path="reports/*" element={<Reports />} />
+            <Route path="goals" element={<ESGGoals />} />
+            <Route path="goals/*" element={<ESGGoals />} />
             
             {/* Analytics */}
             <Route path="analytics" element={<Analytics />} />

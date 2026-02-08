@@ -71,7 +71,7 @@ type AuthMode = 'login' | 'register';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { setUser, setLoading, isLoading } = useAppStore();
+  const { setUser, setToken, setLoading, isLoading } = useAppStore();
   
   const [mode, setMode] = useState<AuthMode>('register'); // Default to register for new users
   const [showPassword, setShowPassword] = useState(false);
@@ -178,13 +178,9 @@ export const Login: React.FC = () => {
         });
         
         if (response.success && response.data) {
-          // Store token in localStorage
-          const existingStorage = localStorage.getItem('esg-app-storage');
-          const parsed = existingStorage ? JSON.parse(existingStorage) : { state: {} };
-          parsed.state.token = response.data.token;
-          localStorage.setItem('esg-app-storage', JSON.stringify(parsed));
-          
-          // Update app state
+          // Update app state - setToken will trigger Zustand persist middleware
+          // which will automatically save to localStorage
+          setToken(response.data.token);
           setUser({
             id: response.data.user.id,
             email: response.data.user.email,

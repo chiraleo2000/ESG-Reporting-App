@@ -78,11 +78,11 @@ async function updateJobStatus(
     await db.query(
       `UPDATE scheduled_jobs 
        SET last_run_at = NOW(),
-           status = $2,
+           status = $2::VARCHAR,
            last_error = $3,
            last_result = $4,
            run_count = run_count + 1,
-           error_count = CASE WHEN $2 = 'failed' THEN error_count + 1 ELSE error_count END,
+           error_count = CASE WHEN $2::VARCHAR = 'failed' THEN error_count + 1 ELSE error_count END,
            updated_at = NOW()
        WHERE job_name = $1`,
       [jobName, status, error, JSON.stringify({ duration, timestamp: new Date().toISOString() })]

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   Calculator,
@@ -22,11 +22,13 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Select, Toggle } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
+import { projectsApi, calculationsApi, activitiesApi } from '@/lib/api';
 
 const container = {
   hidden: { opacity: 0 },
@@ -84,82 +86,6 @@ const initialCustomFactors = [
   { id: 102, name: 'Local Supplier Steel', category: 'material', factor: 1200, unit: 'kgCO2e/tonne', source: 'Supplier EPD', region: 'Thailand', editable: true },
 ];
 
-// Calculation History
-const calculationHistory = [
-  {
-    id: '1',
-    name: 'Q4 2025 Manufacturing Emissions',
-    project: 'Manufacturing Plant 2025',
-    method: 'scope1_stationary',
-    inputs: { fuel_quantity: 15000, emission_factor: 2.68, unit: 'liters diesel' },
-    result: 40200,
-    resultUnit: 'kgCO2e',
-    status: 'completed',
-    calculatedAt: '2025-12-29T14:30:00Z',
-    calculatedBy: 'Admin User',
-    notes: 'Quarterly diesel consumption for backup generators',
-  },
-  {
-    id: '2',
-    name: 'Office Electricity Dec 2025',
-    project: 'Office Operations Carbon Footprint',
-    method: 'scope2_location',
-    inputs: { electricity: 45000, grid_factor: 0.4561, unit: 'kWh' },
-    result: 20524.5,
-    resultUnit: 'kgCO2e',
-    status: 'completed',
-    calculatedAt: '2025-12-28T10:15:00Z',
-    calculatedBy: 'Project Manager',
-    notes: 'Monthly electricity consumption for HQ office',
-  },
-  {
-    id: '3',
-    name: 'Raw Material Transport Q4',
-    project: 'Supply Chain Scope 3 Assessment',
-    method: 'scope3_transport',
-    inputs: { weight: 500, distance: 1200, mode_factor: 0.107, unit: 'tonnes, km' },
-    result: 64200,
-    resultUnit: 'kgCO2e',
-    status: 'completed',
-    calculatedAt: '2025-12-27T09:00:00Z',
-    calculatedBy: 'Admin User',
-    notes: 'Steel shipment from port to factory',
-  },
-  {
-    id: '4',
-    name: 'Steel Procurement Batch',
-    project: 'Supply Chain Scope 3 Assessment',
-    method: 'scope3_purchased',
-    inputs: { quantity: 200, material_factor: 1950, unit: 'tonnes steel' },
-    result: 390000,
-    resultUnit: 'kgCO2e',
-    status: 'processing',
-    calculatedAt: '2025-12-29T15:00:00Z',
-    calculatedBy: 'Admin User',
-    notes: 'Annual steel procurement embodied carbon',
-  },
-  {
-    id: '5',
-    name: 'Business Travel Nov 2025',
-    project: 'Office Operations Carbon Footprint',
-    method: 'scope3_transport',
-    inputs: { distance: 8500, mode_factor: 0.255, unit: 'km air travel' },
-    result: 2167.5,
-    resultUnit: 'kgCO2e',
-    status: 'completed',
-    calculatedAt: '2025-12-15T11:30:00Z',
-    calculatedBy: 'Project Manager',
-    notes: 'Employee business travel flights',
-  },
-];
-
-// Batch projects
-const batchProjects = [
-  { id: 'proj1', name: 'Manufacturing Plant 2025', pendingActivities: 14, scope1: 5, scope2: 2, scope3: 7, estimatedEmissions: 1856.45 },
-  { id: 'proj2', name: 'Office Operations Carbon Footprint', pendingActivities: 3, scope1: 0, scope2: 2, scope3: 1, estimatedEmissions: 342.18 },
-  { id: 'proj3', name: 'Supply Chain Scope 3 Assessment', pendingActivities: 8, scope1: 0, scope2: 0, scope3: 8, estimatedEmissions: 2456.72 },
-];
-
 export const Calculations: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'calculator' | 'batch' | 'history'>('calculator');
   const [selectedMethod, setSelectedMethod] = useState<string>('scope2_location');
@@ -168,6 +94,18 @@ export const Calculations: React.FC = () => {
   const [showCustomFactorForm, setShowCustomFactorForm] = useState(false);
   const [selectedProject, setSelectedProject] = useState('');
   const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // API-driven data
+  const [batchProjects, setBatchProjects] = useState<Array<{
+    id: string; name: string; pendingActivities: number;
+    scope1: number; scope2: number; scope3: number; estimatedEmissions: number;
+  }>>([]);
+  const [calculationHistory, setCalculationHistory] = useState<Array<{
+    id: string; name: string; project: string; method: string;
+    inputs: Record<string, any>; result: number; resultUnit: string;
+    status: string; calculatedAt: string; calculatedBy: string; notes: string;
+  }>>([]);
   
   // Calculator state
   const [calculatorInputs, setCalculatorInputs] = useState<Record<string, number>>({});
@@ -183,6 +121,78 @@ export const Calculations: React.FC = () => {
     source: '',
     region: '',
   });
+
+  // Load projects + history from API
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Load projects for batch tab
+      const projRes = await projectsApi.getAll();
+      const projList = projRes.data?.projects || projRes.data || [];
+      const safeProjects = Array.isArray(projList) ? projList : [];
+
+      const batchList: typeof batchProjects = [];
+      for (const proj of safeProjects) {
+        try {
+          const actRes = await activitiesApi.getByProject(proj.id);
+          const activities = actRes.data?.activities || actRes.data || [];
+          const acts = Array.isArray(activities) ? activities : [];
+          const s1 = acts.filter((a: any) => a.scope === 'scope1').length;
+          const s2 = acts.filter((a: any) => a.scope === 'scope2').length;
+          const s3 = acts.filter((a: any) => a.scope === 'scope3').length;
+          const totalEm = acts.reduce((sum: number, a: any) => 
+            sum + (Number(a.total_emissions_kg_co2e ?? a.totalEmissions ?? 0) / 1000), 0);
+          batchList.push({
+            id: proj.id,
+            name: proj.name,
+            pendingActivities: acts.length,
+            scope1: s1, scope2: s2, scope3: s3,
+            estimatedEmissions: parseFloat(totalEm.toFixed(2)),
+          });
+        } catch { /* skip */ }
+      }
+      setBatchProjects(batchList);
+
+      // Load calculation history
+      try {
+        const historyEntries: typeof calculationHistory = [];
+        for (const proj of safeProjects.slice(0, 5)) {
+          try {
+            const histRes = await calculationsApi.getHistory(proj.id);
+            const history = histRes.data?.history || histRes.data || [];
+            if (Array.isArray(history)) {
+              history.forEach((h: any) => {
+                historyEntries.push({
+                  id: h.id || String(Math.random()),
+                  name: h.name || h.activity_name || `Calculation`,
+                  project: proj.name,
+                  method: h.method || h.calculation_method || 'scope2_location',
+                  inputs: h.inputs || h.input_data || {},
+                  result: Number(h.result || h.total_emissions || 0),
+                  resultUnit: h.resultUnit || 'kgCO2e',
+                  status: h.status || 'completed',
+                  calculatedAt: h.calculatedAt || h.calculated_at || h.created_at || new Date().toISOString(),
+                  calculatedBy: h.calculatedBy || h.calculated_by || 'System',
+                  notes: h.notes || '',
+                });
+              });
+            }
+          } catch { /* no history for this project */ }
+        }
+        if (historyEntries.length > 0) {
+          setCalculationHistory(historyEntries);
+        }
+      } catch { /* history optional */ }
+    } catch (err) {
+      console.error('Failed to load calculations data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const currentMethod = calculationMethods[selectedMethod as keyof typeof calculationMethods];
 

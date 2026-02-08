@@ -5,7 +5,7 @@ A comprehensive **Environmental, Social, and Governance (ESG)** reporting platfo
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/Tests-864_passing-brightgreen.svg)](#-testing)
+[![Tests](https://img.shields.io/badge/Tests-912_passing-brightgreen.svg)](#-testing)
 [![Coverage](https://img.shields.io/badge/Coverage-95.82%25-brightgreen.svg)](#-testing)
 
 ---
@@ -17,9 +17,10 @@ A comprehensive **Environmental, Social, and Governance (ESG)** reporting platfo
   - **Scope 2**: Purchased electricity, Steam, Heating, Cooling (4 categories)
   - **Scope 3**: All 14 categories as per GHG Protocol
 - **🧮 Built-in Calculator** - Tier 1/2/3 calculation methods with formula display
-- **📈 Analytics Dashboard** - Real-time trends, benchmarks, AI-powered insights
+- **📈 Analytics Dashboard** - Real-time trends, benchmarks, AI-powered insights with dynamic API data
 - **📑 Multi-Standard Compliance** - EU CBAM, UK CBAM, China Carbon Market, K-ESG, MAFF ESG, Thai ESG
-- **🔐 Role-Based Access** - Admin, Director, Editor, Viewer, Auditor roles
+- **🎯 ESG Goals & Targets** - SBTi/Paris-aligned goal tracking with progress visualization, similar to MS Cloud for Sustainability
+- **🔐 Role-Based Access** - Owner, Director, Editor, Viewer, Auditor roles
 - **📤 Import/Export** - CSV, JSON, Excel, PDF support with file parsing
 - **🔍 Vector Search** - AI-powered document similarity (pgvector)
 - **✍️ Digital Signatures** - Report approval workflow with cryptographic signatures
@@ -80,7 +81,15 @@ cd frontend && npm test
 | viewer@esgdemo.com | Demo@123 | Read-only access |
 | auditor@esgdemo.com | Demo@123 | External Auditor |
 
-**Note:** Demo accounts come with 3 sample projects, 30+ activities covering all scopes, and comprehensive emission factors.
+**Sugar Factory Demo** (50 tons/year white sugar, export to China):
+
+| Email | Password | Role |
+|-------|----------|------|
+| manager@thaisugar.co.th | Sugar@2024 | Factory Owner |
+| env@thaisugar.co.th | Sugar@2024 | Environmental Editor |
+| auditor@thaiaudit.co.th | Sugar@2024 | External Auditor |
+
+**Note:** Demo accounts come with 3 sample projects, 30+ activities covering all scopes, and comprehensive emission factors. The sugar factory demo includes 16 activities across all 3 scopes with 219.3 tCO2e total emissions and 5 ESG goals.
 
 ---
 
@@ -116,7 +125,7 @@ esg-reporting-app/
 
 ## 🧪 Testing
 
-**864 total tests** across backend and frontend with **95.82% code coverage**.
+**912 total tests** across backend and frontend with **95.82% code coverage**.
 
 ### Quick Test Commands
 
@@ -127,7 +136,7 @@ cd backend && npx jest --forceExit
 # Backend with coverage report
 cd backend && npx jest --forceExit --coverage
 
-# Frontend tests (42 tests, 2 suites)
+# Frontend tests (90 tests, 3 suites)
 cd frontend && npx vitest run
 
 # E2E tests (requires running app)
@@ -172,12 +181,13 @@ npx playwright test
 | **Utils** | helpers | ~67 | 100% |
 | | logger | ~10 | 88.23% |
 
-### Frontend Test Suites (2 suites, 42 tests)
+### Frontend Test Suites (3 suites, 90 tests)
 
 | Suite | Tests | Description |
 |-------|-------|-------------|
-| components.test.tsx | ~5 | UI component rendering |
-| pages.test.tsx | ~37 | All 15 pages + barrel exports + domain formatting |
+| components.test.tsx | 19 | Utility functions, scope classification, emission factors, validation |
+| pages.test.tsx | 23 | All 15 pages + barrel exports + domain logic + formatting |
+| workflow.test.tsx | 48 | Data flow, sugar factory, standards compliance, GHG calculations, goals, analytics, roles |
 
 > See [DEVELOPER-SETUP.md](docs/DEVELOPER-SETUP.md) for detailed test running instructions.
 

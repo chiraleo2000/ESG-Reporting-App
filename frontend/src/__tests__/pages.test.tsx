@@ -86,21 +86,29 @@ vi.mock('../lib/api', () => ({
   },
   activitiesApi: {
     getAll: vi.fn().mockResolvedValue({ data: { activities: [] }, success: true }),
+    getByProject: vi.fn().mockResolvedValue({ data: { activities: [] }, success: true }),
     get: vi.fn().mockResolvedValue({ data: {}, success: true }),
     create: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    createForProject: vi.fn().mockResolvedValue({ data: {}, success: true }),
     update: vi.fn().mockResolvedValue({ data: {}, success: true }),
     delete: vi.fn().mockResolvedValue({ success: true }),
+    getSummary: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    export: vi.fn().mockResolvedValue({ data: {}, success: true }),
   },
   calculationsApi: {
     calculate: vi.fn().mockResolvedValue({ data: {}, success: true }),
     calculateAll: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    calculateActivity: vi.fn().mockResolvedValue({ data: {}, success: true }),
     getTotals: vi.fn().mockResolvedValue({ data: { scope1: 0, scope2: 0, scope3: 0, total: 0 }, success: true }),
+    calculateCFP: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    calculateCFO: vi.fn().mockResolvedValue({ data: {}, success: true }),
     getCFP: vi.fn().mockResolvedValue({ data: {}, success: true }),
     getCFO: vi.fn().mockResolvedValue({ data: {}, success: true }),
     calculateBoth: vi.fn().mockResolvedValue({ data: {}, success: true }),
     getPrecursors: vi.fn().mockResolvedValue({ data: {}, success: true }),
     getHotspots: vi.fn().mockResolvedValue({ data: {}, success: true }),
     getQuality: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    getHistory: vi.fn().mockResolvedValue({ data: { history: [] }, success: true }),
   },
   reportsApi: {
     getAll: vi.fn().mockResolvedValue({ data: { reports: [] }, success: true }),
@@ -175,6 +183,25 @@ vi.mock('../store/projectStore', () => ({
     currentProject: { id: 'p-1', name: 'Test Project' },
     setProjects: vi.fn(),
     setCurrentProject: vi.fn(),
+  }),
+}));
+
+vi.mock('../store/appStore', () => ({
+  useAppStore: () => ({
+    user: { id: 'u-1', name: 'Test User', email: 'test@test.com', role: 'owner' },
+    token: 'fake-token',
+    isAuthenticated: true,
+    projects: [{ id: 'p-1', name: 'Test Project' }],
+    currentProject: { id: 'p-1', name: 'Test Project' },
+    login: vi.fn(),
+    logout: vi.fn(),
+    setUser: vi.fn(),
+    setProjects: vi.fn(),
+    setCurrentProject: vi.fn(),
+    theme: 'light',
+    setTheme: vi.fn(),
+    sidebarOpen: true,
+    setSidebarOpen: vi.fn(),
   }),
 }));
 

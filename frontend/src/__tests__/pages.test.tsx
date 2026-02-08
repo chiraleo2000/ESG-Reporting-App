@@ -56,6 +56,7 @@ vi.mock('recharts', () => ({
 }));
 
 // Mock axios / API lib
+const mockApiFetch = vi.fn().mockResolvedValue({ data: [], success: true });
 vi.mock('../lib/api', () => ({
   default: {
     get: vi.fn().mockResolvedValue({ data: { data: [], success: true } }),
@@ -75,6 +76,71 @@ vi.mock('../lib/api', () => ({
     put: vi.fn().mockResolvedValue({ data: { data: {}, success: true } }),
     delete: vi.fn().mockResolvedValue({ data: { success: true } }),
   },
+  projectsApi: {
+    getAll: vi.fn().mockResolvedValue({ data: { projects: [] }, success: true }),
+    get: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    create: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    update: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    delete: vi.fn().mockResolvedValue({ success: true }),
+    getDashboard: vi.fn().mockResolvedValue({ data: {}, success: true }),
+  },
+  activitiesApi: {
+    getAll: vi.fn().mockResolvedValue({ data: { activities: [] }, success: true }),
+    get: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    create: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    update: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    delete: vi.fn().mockResolvedValue({ success: true }),
+  },
+  calculationsApi: {
+    calculate: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    calculateAll: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    getTotals: vi.fn().mockResolvedValue({ data: { scope1: 0, scope2: 0, scope3: 0, total: 0 }, success: true }),
+    getCFP: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    getCFO: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    calculateBoth: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    getPrecursors: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    getHotspots: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    getQuality: vi.fn().mockResolvedValue({ data: {}, success: true }),
+  },
+  reportsApi: {
+    getAll: vi.fn().mockResolvedValue({ data: { reports: [] }, success: true }),
+    generate: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    get: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    download: vi.fn().mockResolvedValue({ data: new Blob() }),
+    delete: vi.fn().mockResolvedValue({ success: true }),
+  },
+  goalsApi: {
+    getAll: vi.fn().mockResolvedValue({ data: { goals: [] }, success: true }),
+    get: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    create: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    update: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    delete: vi.fn().mockResolvedValue({ success: true }),
+    updateProgress: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    getSummary: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    bulkUpdateProgress: vi.fn().mockResolvedValue({ data: {}, success: true }),
+  },
+  authApi: {
+    login: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    register: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    me: vi.fn().mockResolvedValue({ data: {}, success: true }),
+    logout: vi.fn().mockResolvedValue({ success: true }),
+  },
+  emissionFactorsApi: {
+    getAll: vi.fn().mockResolvedValue({ data: [], success: true }),
+  },
+  filesApi: {
+    upload: vi.fn().mockResolvedValue({ data: {}, success: true }),
+  },
+  auditLogsApi: {
+    getAll: vi.fn().mockResolvedValue({ data: { logs: [] }, success: true }),
+  },
+  signaturesApi: {
+    getAll: vi.fn().mockResolvedValue({ data: [], success: true }),
+  },
+  standardsApi: {
+    getAll: vi.fn().mockResolvedValue({ data: [], success: true }),
+  },
+  healthCheck: vi.fn().mockResolvedValue({ status: 'ok' }),
 }));
 
 // Mock store

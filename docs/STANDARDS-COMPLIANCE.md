@@ -11,6 +11,7 @@ This document outlines the ESG and carbon reporting standards supported by the E
 3. [Regional Standards](#regional-standards)
 4. [Compliance Matrix](#compliance-matrix)
 5. [Reporting Requirements](#reporting-requirements)
+6. [ESG Goals & Target Tracking](#esg-goals--target-tracking)
 
 ---
 
@@ -385,4 +386,85 @@ Required fields:
 
 ---
 
-*Last updated: January 2026*
+## ESG Goals & Target Tracking
+
+### Overview
+
+The ESG Goals module allows organizations to set, track, and report on sustainability targets aligned with reporting standards and regulatory requirements.
+
+### Goal Types & Standard Alignment
+
+| Goal Category | Aligned Standards | Description |
+|---------------|-------------------|-------------|
+| Emission Reduction | GHG Protocol, EU CBAM, All regional | Absolute or intensity-based reduction targets |
+| Energy Efficiency | ISO 50001, Thai ESG, K-ESG | Energy consumption per unit of output |
+| Renewable Energy | RE100, Thai ESG, MAFF ESG | % of energy from renewable sources |
+| Waste Reduction | GRI 306, Thai ESG | Waste diversion and minimization |
+| Water Conservation | GRI 303, Thai ESG | Water withdrawal reduction targets |
+| Supply Chain | Scope 3, EU CBAM | Supplier engagement and assessment |
+
+### Goal Status Workflow
+
+```
+draft → active → completed
+                → cancelled
+```
+
+| Status | Description | Standard Relevance |
+|--------|-------------|-------------------|
+| **Draft** | Goal being defined, not yet committed | Internal planning |
+| **Active** | Goal committed, progress being tracked | Reporting period active |
+| **Completed** | Target achieved or period ended | Disclosed in annual reports |
+| **Cancelled** | Goal withdrawn (with justification) | Must document reason |
+
+### Regulatory Requirements for Targets
+
+#### EU CBAM
+- Must set **emission intensity targets** per product category
+- Track progress against EU benchmark values
+- Annual reporting on improvement trajectory
+
+#### Thai ESG (SEC Thailand)
+- **ESG goals disclosure** recommended for listed companies
+- Quantitative targets with clear timelines
+- Year-over-year comparison required
+
+#### K-ESG (Korea)
+- **Quantitative GHG reduction targets** mandatory for large emitters
+- Must align with Korea 2050 Carbon Neutrality goal
+- Interim milestones required (2030, 2040, 2050)
+
+#### China Carbon Market
+- Comply with **allocated emission allowances**
+- Track actual vs. allocated emissions
+- Surplus/deficit reported annually
+
+#### MAFF ESG (Japan)
+- Set targets aligned with Japan's **Green Food System Strategy**
+- Agriculture and food-specific sustainability KPIs
+- Annual progress reporting to MAFF
+
+### Integration with Reports
+
+ESG Goals data is integrated into generated reports:
+
+1. **Goal summary** included in report header section
+2. **Progress metrics** (current vs. target) embedded in standard-specific sections
+3. **Status tracking** provides audit trail for compliance verification
+4. **Historical comparison** enables year-over-year target assessment
+
+### API Endpoints
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/api/v1/projects/:id/goals` | Create a new ESG goal |
+| GET | `/api/v1/projects/:id/goals` | List all goals for a project |
+| GET | `/api/v1/projects/:id/goals/summary` | Goal progress summary dashboard |
+| GET | `/api/v1/projects/:id/goals/:goalId` | Get specific goal details |
+| PUT | `/api/v1/projects/:id/goals/:goalId` | Update goal definition |
+| PATCH | `/api/v1/projects/:id/goals/:goalId/progress` | Update progress value |
+| DELETE | `/api/v1/projects/:id/goals/:goalId` | Delete a goal |
+
+---
+
+*Last updated: June 2025*

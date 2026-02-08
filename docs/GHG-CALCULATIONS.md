@@ -13,6 +13,9 @@ This document details the greenhouse gas (GHG) calculation methodologies impleme
 5. [Global Warming Potentials](#global-warming-potentials)
 6. [Emission Factor Sources](#emission-factor-sources)
 7. [Uncertainty & Quality](#uncertainty--quality)
+8. [Carbon Footprint of Product (CFP)](#carbon-footprint-of-product-cfp)
+9. [Carbon Footprint of Organization (CFO)](#carbon-footprint-of-organization-cfo)
+10. [Industry Example: Sugar Factory](#industry-example-sugar-factory)
 
 ---
 
@@ -507,7 +510,164 @@ GWP values convert non-CO₂ gases to CO₂ equivalent.
 6. DEFRA Conversion Factors 2024
 7. EPA Emission Factors Hub
 8. EU CBAM Implementing Regulation (2023)
+9. ISO 14067:2018 - Carbon Footprint of Products
+10. ISO 14064-1:2018 - Organization-level GHG quantification
 
 ---
 
-*Last updated: January 2026*
+## Carbon Footprint of Product (CFP)
+
+### Overview
+
+CFP quantifies the total GHG emissions associated with a product throughout its life cycle (cradle-to-gate or cradle-to-grave), following ISO 14067 and the GHG Protocol Product Standard.
+
+### Calculation Method
+
+The system calculates CFP using calculated activity emissions grouped by scope:
+
+```
+CFP = Σ(Scope 1 emissions) + Σ(Scope 2 emissions) + Σ(Scope 3 emissions)
+```
+
+### Breakdown Categories
+
+| Category | Description | Source Scopes |
+|----------|-------------|---------------|
+| Raw Materials | Upstream material extraction & processing | Scope 3 (Cat 1) |
+| Manufacturing | Direct production emissions | Scope 1 |
+| Energy | Electricity & purchased energy | Scope 2 |
+| Transportation | Inbound & outbound logistics | Scope 3 (Cat 4, 9) |
+| Waste | Waste generated in production | Scope 3 (Cat 5) |
+
+### Per-Unit Metrics
+
+```
+CFP per unit = Total CFP / Production Volume
+Functional Unit example: kg CO₂e / tonne of product
+```
+
+### Biogenic Carbon
+
+Biogenic CO₂ (from biological sources such as bagasse combustion) is reported **separately** per ISO 14067:
+
+```
+Biogenic CO₂ = Σ(emissions where gas_type = 'biogenic_co2')
+```
+
+---
+
+## Carbon Footprint of Organization (CFO)
+
+### Overview
+
+CFO quantifies the total GHG emissions from all activities within an organization's boundary, following ISO 14064-1 and the GHG Protocol Corporate Standard.
+
+### Calculation Method
+
+```
+Total CFO = Scope 1 Total + Scope 2 Total + Scope 3 Total
+```
+
+Each scope is calculated as:
+```
+Scope Total = Σ(Activity Emissions for all activities in that scope)
+```
+
+### Intensity Metrics
+
+| Metric | Formula | Use Case |
+|--------|---------|----------|
+| Revenue Intensity | Total CFO / Revenue | Financial comparison |
+| Employee Intensity | Total CFO / Headcount | Workforce benchmarking |
+| Production Intensity | Total CFO / Output Volume | Operational efficiency |
+
+### Scope Breakdown Example
+
+```
+Organization: Thai Sugar Co., Ltd.
+Period: FY 2024
+
+Scope 1:  45,280 kg CO₂e  (Boilers, Vehicles, Process)
+Scope 2:  12,450 kg CO₂e  (Grid Electricity)
+Scope 3:  18,920 kg CO₂e  (Transport, Waste, Procurement)
+────────────────────────────────────
+Total CFO: 76,650 kg CO₂e = 76.65 tonnes CO₂e
+```
+
+---
+
+## Industry Example: Sugar Factory
+
+### Emission Sources
+
+A typical sugar factory has emissions across all three scopes:
+
+#### Scope 1 — Direct Emissions
+
+| Activity | Source | Typical Annual | EF | Emissions |
+|----------|--------|----------------|-----|-----------|
+| Bagasse Boiler | Combustion | 50,000 tonnes | 0.030 kg CO₂/kg | 1,500 t CO₂e |
+| Diesel Generators | Backup power | 25,000 liters | 2.6501 kg/L | 66.25 t CO₂e |
+| Company Vehicles | Transport | 15,000 liters diesel | 2.6501 kg/L | 39.75 t CO₂e |
+| Lime Kiln | Process | 2,000 tonnes CaCO₃ | 0.44 t CO₂/t | 880 t CO₂e |
+| Refrigerant Leaks | Fugitive | 50 kg R-410A | 2,088 GWP | 104.4 t CO₂e |
+
+#### Scope 2 — Indirect Energy
+
+| Activity | Source | Typical Annual | EF | Emissions |
+|----------|--------|----------------|-----|-----------|
+| Grid Electricity | PEA/EGAT | 2,000,000 kWh | 0.4999 kg/kWh | 999.8 t CO₂e |
+
+#### Scope 3 — Value Chain
+
+| Activity | Source | Category | Typical Annual | Emissions |
+|----------|--------|----------|----------------|-----------|
+| Sugarcane Transport | Inbound logistics | Cat 4 | 100,000 t × 50 km | 350 t CO₂e |
+| Chemical Procurement | Purchased goods | Cat 1 | Various | 120 t CO₂e |
+| Waste Disposal | Filter cake, ash | Cat 5 | 5,000 tonnes | 75 t CO₂e |
+| Employee Commuting | Workforce | Cat 7 | 500 employees | 45 t CO₂e |
+
+### Sugar Factory CFP Example
+
+**Product: Refined White Sugar (1 tonne)**
+
+```
+Raw Materials (Scope 3):   15.2 kg CO₂e/t  (sugarcane farming, chemicals)
+Manufacturing (Scope 1):   28.5 kg CO₂e/t  (milling, boiling, centrifuging)
+Energy (Scope 2):          12.1 kg CO₂e/t  (grid electricity for processing)
+Transportation (Scope 3):   4.8 kg CO₂e/t  (cane transport + distribution)
+Waste (Scope 3):            1.9 kg CO₂e/t  (filter cake, ash disposal)
+─────────────────────────────────────────
+Total CFP:                 62.5 kg CO₂e/t of refined sugar
+Biogenic CO₂ (separate):  85.0 kg CO₂/t   (bagasse combustion)
+```
+
+### Data Quality in Sugar Industry
+
+| Data Point | Source | Quality Score |
+|------------|--------|--------------|
+| Fuel consumption | Metered purchases | 1 (±5%) |
+| Electricity | Utility bills | 1 (±5%) |
+| Bagasse burned | Weigh bridge | 2 (±10%) |
+| Cane transport | GPS + fuel logs | 2 (±10%) |
+| Waste volumes | Estimated | 4 (±30%) |
+| Employee commuting | Survey | 4 (±30%) |
+
+### Seed Data
+
+The application includes seed data for a sugar factory demonstration:
+
+```sql
+-- Load sugar factory demo data
+psql -U postgres -d esg_reporting -f database/seed-sugar-factory.sql
+```
+
+This creates:
+- 🏭 **Thai Sugar Co., Ltd.** project (Thai ESG standard)
+- 📊 **17 activities** across Scope 1, 2, and 3
+- 👥 **3 team members** (owner, editor, viewer roles)
+- 🔬 Pre-calculated emissions for all activities
+
+---
+
+*Last updated: June 2025*

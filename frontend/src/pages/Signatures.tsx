@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   FileSignature,
@@ -14,12 +14,14 @@ import {
   User,
   FileText,
   Lock,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { useAppStore } from '@/store/appStore';
+import { signaturesApi, projectsApi, reportsApi } from '@/lib/api';
 
 const container = {
   hidden: { opacity: 0 },
@@ -104,9 +106,66 @@ const pendingDocuments = [
 export const Signatures: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'signed'>('all');
+  const [loading, setLoading] = useState(false);
+  const [signatures, setSignatures] = useState(demoSignatures);
+  const [pendingDocs, setPendingDocs] = useState(pendingDocuments);
   const { user } = useAppStore();
 
-  const filteredSignatures = demoSignatures.filter((s) => {
+  const fetchSignatures = useCallback(async () => {
+    setLoading(true);
+    try {
+      const projectsRes = await projectsApi.getAll();
+      const projects = projectsRes?.data || projectsRes || [];
+      if (Array.isArray(projects) && projects.length > 0) {
+        const allSigs: any[] = [];
+        for (const project of projects.slice(0, 5)) {
+          try {
+            // Get reports for the project, then get signatures for each report
+            const reportsRes = await reportsApi.getByProject(project.id);
+            const reports = reportsRes?.data || reportsRes || [];
+            if (Array.isArray(reports)) {
+              for (const report of reports.slice(0, 5)) {
+                try {
+                  const sigsRes = await signaturesApi.getByReport(report.id);
+                  const sigs = sigsRes?.data || sigsRes || [];
+                  if (Array.isArray(sigs)) {
+                    allSigs.push(...sigs.map((s: any) => ({
+                      id: s.id,
+                      reportName: report.title || report.name || `Report ${report.id}`,
+                      projectName: project.name || project.company_name || 'Project',
+                      standard: report.standard || s.standard || 'N/A',
+                      signedBy: s.signer_name || s.signerName || s.signed_by || 'Unknown',
+                      signedAt: s.signed_at || s.signedAt || s.created_at || new Date().toISOString(),
+                      signatureType: s.signature_type || s.signatureType || 'approval',
+                      status: s.status || 'valid',
+                      hash: s.hash || s.signature_hash || 'sha256:...',
+                    })));
+                  }
+                } catch {
+                  // Skip reports without signatures
+                }
+              }
+            }
+          } catch {
+            // Skip projects with no reports
+          }
+        }
+        if (allSigs.length > 0) {
+          setSignatures(allSigs);
+        }
+      }
+    } catch (err) {
+      console.warn('Signatures: API not available, using demo data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSignatures();
+  }, [fetchSignatures]);
+
+  const filteredSignatures = signatures.filter((s) => {
     const matchesSearch = s.reportName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          s.projectName.toLowerCase().includes(searchTerm.toLowerCase());
     if (activeTab === 'pending') return matchesSearch && s.status === 'pending';
@@ -146,7 +205,7 @@ export const Signatures: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-earth-500">Total Signatures</p>
-              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{demoSignatures.length}</p>
+              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{signatures.length}</p>
             </div>
           </div>
         </Card>
@@ -158,7 +217,7 @@ export const Signatures: React.FC = () => {
             <div>
               <p className="text-sm text-earth-500">Valid</p>
               <p className="text-xl font-bold text-earth-800 dark:text-earth-100">
-                {demoSignatures.filter(s => s.status === 'valid').length}
+                {signatures.filter(s => s.status === 'valid').length}
               </p>
             </div>
           </div>
@@ -171,7 +230,7 @@ export const Signatures: React.FC = () => {
             <div>
               <p className="text-sm text-earth-500">Pending</p>
               <p className="text-xl font-bold text-earth-800 dark:text-earth-100">
-                {pendingDocuments.length}
+                {pendingDocs.length}
               </p>
             </div>
           </div>
@@ -184,7 +243,7 @@ export const Signatures: React.FC = () => {
             <div>
               <p className="text-sm text-earth-500">Your Signatures</p>
               <p className="text-xl font-bold text-earth-800 dark:text-earth-100">
-                {demoSignatures.filter(s => s.signedBy === 'Admin User').length}
+                {signatures.filter(s => s.signedBy === (user?.name || 'Admin User')).length}
               </p>
             </div>
           </div>
@@ -192,16 +251,16 @@ export const Signatures: React.FC = () => {
       </motion.div>
 
       {/* Pending Documents */}
-      {pendingDocuments.length > 0 && (
+      {pendingDocs.length > 0 && (
         <motion.div variants={item}>
           <Card variant="bordered" className="border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20">
             <CardHeader
               title="Documents Pending Signature"
-              subtitle={`${pendingDocuments.length} documents require your signature`}
-              action={<Badge variant="warning">{pendingDocuments.length} Pending</Badge>}
+              subtitle={`${pendingDocs.length} documents require your signature`}
+              action={<Badge variant="warning">{pendingDocs.length} Pending</Badge>}
             />
             <div className="space-y-3 mt-4">
-              {pendingDocuments.map((doc) => (
+              {pendingDocs.map((doc) => (
                 <div
                   key={doc.id}
                   className="flex items-center justify-between p-4 bg-white dark:bg-earth-800 rounded-xl border border-grass-100 dark:border-earth-700"

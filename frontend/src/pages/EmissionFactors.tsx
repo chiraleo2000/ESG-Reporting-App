@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   Search,
@@ -16,11 +16,13 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
+import { emissionFactorsApi } from '@/lib/api';
 
 const container = {
   hidden: { opacity: 0 },
@@ -67,8 +69,83 @@ export const EmissionFactors: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'grid' | 'fuel' | 'materials'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [apiGridFactors, setApiGridFactors] = useState<any[]>([]);
+  const [apiFuelFactors, setApiFuelFactors] = useState<any[]>([]);
+  const [apiMaterialFactors, setApiMaterialFactors] = useState<any[]>([]);
+  const [dataSource, setDataSource] = useState<'api' | 'fallback'>('fallback');
 
-  const currentFactors = activeTab === 'grid' ? gridEmissionFactors : activeTab === 'fuel' ? fuelFactors : materialFactors;
+  const fetchEmissionFactors = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await emissionFactorsApi.getAll();
+      const factors = response?.data || response || [];
+      if (Array.isArray(factors) && factors.length > 0) {
+        // Categorize factors from API into grid/fuel/materials
+        const grid: any[] = [];
+        const fuel: any[] = [];
+        const materials: any[] = [];
+        
+        factors.forEach((f: any) => {
+          const name = (f.activity_type || f.activityType || f.name || '').toLowerCase();
+          const category = (f.category || '').toLowerCase();
+          const unit = (f.unit || '').toLowerCase();
+          
+          if (category.includes('grid') || category.includes('electricity') || name.includes('grid') || name.includes('electricity') || unit.includes('kwh')) {
+            grid.push({
+              id: f.id,
+              country: f.region || f.country || f.source || 'N/A',
+              region: f.activity_type || f.activityType || f.name || 'N/A',
+              year: f.year || 2025,
+              factor: parseFloat(f.factor || f.emission_factor || f.value || '0'),
+              unit: f.unit || 'kgCO2e/kWh',
+              source: f.source || f.reference || 'Custom',
+            });
+          } else if (category.includes('fuel') || category.includes('combustion') || name.includes('diesel') || name.includes('gas') || name.includes('lpg') || name.includes('fuel') || name.includes('petrol') || name.includes('coal') || name.includes('bagasse')) {
+            fuel.push({
+              id: f.id,
+              fuel: f.activity_type || f.activityType || f.name || 'N/A',
+              unit: f.unit || 'kgCO2e/unit',
+              factor: parseFloat(f.factor || f.emission_factor || f.value || '0'),
+              scope: f.scope ? `Scope ${f.scope}` : 'Scope 1',
+              source: f.source || f.reference || 'Custom',
+            });
+          } else {
+            materials.push({
+              id: f.id,
+              material: f.activity_type || f.activityType || f.name || 'N/A',
+              unit: f.unit || 'tCO2e/tonne',
+              factor: parseFloat(f.factor || f.emission_factor || f.value || '0'),
+              category: f.category || 'CBAM Materials',
+              source: f.source || f.reference || 'Custom',
+            });
+          }
+        });
+
+        if (grid.length > 0) setApiGridFactors(grid);
+        if (fuel.length > 0) setApiFuelFactors(fuel);
+        if (materials.length > 0) setApiMaterialFactors(materials);
+        if (grid.length > 0 || fuel.length > 0 || materials.length > 0) {
+          setDataSource('api');
+        }
+      }
+    } catch (err) {
+      console.warn('EmissionFactors: API not available, using reference data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchEmissionFactors();
+  }, [fetchEmissionFactors]);
+
+  // Use API data if available, otherwise fall back to reference data
+  const activeGridFactors = apiGridFactors.length > 0 ? apiGridFactors : gridEmissionFactors;
+  const activeFuelFactors = apiFuelFactors.length > 0 ? apiFuelFactors : fuelFactors;
+  const activeMaterialFactors = apiMaterialFactors.length > 0 ? apiMaterialFactors : materialFactors;
+
+  const currentFactors = activeTab === 'grid' ? activeGridFactors : activeTab === 'fuel' ? activeFuelFactors : activeMaterialFactors;
 
   const filteredFactors = currentFactors.filter((f: any) => {
     const searchLower = searchTerm.toLowerCase();
@@ -97,10 +174,13 @@ export const EmissionFactors: React.FC = () => {
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
-          <Button variant="outline" size="sm">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Sync
+          <Button variant="outline" size="sm" onClick={fetchEmissionFactors} disabled={loading}>
+            {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+            {loading ? 'Syncing...' : 'Sync'}
           </Button>
+          {dataSource === 'api' && (
+            <Badge variant="grass" className="ml-2 self-center">Live Data</Badge>
+          )}
         </div>
       </motion.div>
 
@@ -113,7 +193,7 @@ export const EmissionFactors: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-earth-500">Grid Factors</p>
-              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{gridEmissionFactors.length}</p>
+              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{activeGridFactors.length}</p>
             </div>
           </div>
         </Card>
@@ -124,7 +204,7 @@ export const EmissionFactors: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-earth-500">Fuel Factors</p>
-              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{fuelFactors.length}</p>
+              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{activeFuelFactors.length}</p>
             </div>
           </div>
         </Card>
@@ -135,7 +215,7 @@ export const EmissionFactors: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-earth-500">Material Factors</p>
-              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{materialFactors.length}</p>
+              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{activeMaterialFactors.length}</p>
             </div>
           </div>
         </Card>
@@ -146,7 +226,7 @@ export const EmissionFactors: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-earth-500">Regions Covered</p>
-              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">9</p>
+              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{new Set(activeGridFactors.map((f: any) => f.country)).size}</p>
             </div>
           </div>
         </Card>

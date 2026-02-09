@@ -1,6 +1,6 @@
 {
   "name": "@esg-app/frontend",
-  "version": "1.0.1",
+  "version": "2.1.1",
   "type": "module",
   "description": "ESG Reporting App - Frontend Dashboard",
   "scripts": {

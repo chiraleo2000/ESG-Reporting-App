@@ -34,6 +34,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { useThemeStore } from '@/store';
+import { useAppStore } from '@/store/appStore';
 
 interface NavItem {
   name: string;
@@ -125,6 +126,7 @@ const settingsNavItems: NavItem[] = [
 
 export const Sidebar: React.FC = () => {
   const { sidebarCollapsed, toggleSidebar, animationsEnabled } = useThemeStore();
+  const { user } = useAppStore();
   const location = useLocation();
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
@@ -341,11 +343,11 @@ export const Sidebar: React.FC = () => {
         <div className="px-3 pb-4">
           <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-900/20 dark:to-green-900/20 border border-blue-200 dark:border-blue-800">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#0078D4] to-[#107C10] flex items-center justify-center text-white font-semibold">
-              JD
+              {user?.name ? user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'U'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-earth-800 dark:text-earth-100 text-sm truncate">John Doe</p>
-              <p className="text-xs text-earth-500 dark:text-earth-400 truncate">Admin</p>
+              <p className="font-medium text-earth-800 dark:text-earth-100 text-sm truncate">{user?.name || 'User'}</p>
+              <p className="text-xs text-earth-500 dark:text-earth-400 truncate">{user?.role || 'viewer'}</p>
             </div>
             <Settings className="w-4 h-4 text-earth-400 cursor-pointer hover:text-blue-600 transition-colors" />
           </div>

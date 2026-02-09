@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Upload,
@@ -14,11 +14,13 @@ import {
   HelpCircle,
   File,
   FolderUp,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Select } from '@/components/ui/Input';
+import { filesApi, projectsApi } from '@/lib/api';
 
 const container = {
   hidden: { opacity: 0 },
@@ -90,6 +92,49 @@ const templates = [
 export const DataImport: React.FC = () => {
   const [selectedProject, setSelectedProject] = useState('');
   const [dragActive, setDragActive] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<string | null>(null);
+  const [projects, setProjects] = useState<Array<{ value: string; label: string }>>([
+    { value: '', label: 'Select Project' },
+  ]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const res = await projectsApi.getAll();
+      const data = res?.data || res || [];
+      if (Array.isArray(data) && data.length > 0) {
+        setProjects([
+          { value: '', label: 'Select Project' },
+          ...data.map((p: any) => ({
+            value: p.id,
+            label: p.name || p.company_name || `Project ${p.id}`,
+          })),
+        ]);
+      }
+    } catch (err) {
+      console.warn('DataImport: Could not load projects');
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    setUploadResult(null);
+    try {
+      const file = files[0];
+      const result = await filesApi.upload(file, selectedProject || undefined);
+      setUploadResult(`✅ "${file.name}" uploaded successfully! ${result?.data?.id ? `File ID: ${result.data.id}` : ''}`);
+    } catch (err: any) {
+      setUploadResult(`❌ Upload failed: ${err?.message || 'Server error'}`);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -130,17 +175,24 @@ export const DataImport: React.FC = () => {
             subtitle="Drag and drop files or click to browse"
             action={
               <Select
-                options={[
-                  { value: '', label: 'Select Project' },
-                  { value: 'proj1', label: 'Manufacturing Plant 2025' },
-                  { value: 'proj2', label: 'Office Operations Carbon Footprint' },
-                  { value: 'proj3', label: 'Supply Chain Scope 3 Assessment' },
-                ]}
+                options={projects}
                 value={selectedProject}
                 onChange={(e) => setSelectedProject(e.target.value)}
               />
             }
           />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            className="hidden"
+            onChange={(e) => handleFileUpload(e.target.files)}
+          />
+          {uploadResult && (
+            <div className={`mt-4 p-3 rounded-lg text-sm ${uploadResult.startsWith('✅') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'}`}>
+              {uploadResult}
+            </div>
+          )}
           <div
             className={`mt-4 border-2 border-dashed rounded-xl p-12 text-center transition-colors ${
               dragActive
@@ -153,17 +205,28 @@ export const DataImport: React.FC = () => {
             onDrop={(e) => {
               e.preventDefault();
               setDragActive(false);
-              // Handle file drop
+              handleFileUpload(e.dataTransfer.files);
             }}
           >
             <div className="w-16 h-16 mx-auto rounded-full bg-grass-100 dark:bg-earth-700 flex items-center justify-center mb-4">
-              <FolderUp className="w-8 h-8 text-grass-600 dark:text-grass-400" />
+              {uploading ? (
+                <Loader2 className="w-8 h-8 text-grass-600 dark:text-grass-400 animate-spin" />
+              ) : (
+                <FolderUp className="w-8 h-8 text-grass-600 dark:text-grass-400" />
+              )}
             </div>
             <p className="text-earth-800 dark:text-earth-100 font-medium mb-2">
-              Drop your files here, or{' '}
-              <button className="text-grass-600 dark:text-grass-400 hover:underline">
-                browse
-              </button>
+              {uploading ? 'Uploading...' : (
+                <>
+                  Drop your files here, or{' '}
+                  <button
+                    className="text-grass-600 dark:text-grass-400 hover:underline"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    browse
+                  </button>
+                </>
+              )}
             </p>
             <p className="text-sm text-earth-500 dark:text-earth-400">
               Supports: .xlsx, .xls, .csv (max 10MB)

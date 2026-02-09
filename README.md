@@ -250,7 +250,42 @@ docker compose up -d
 
 ---
 
-## 📄 License
+## � Changelog
+
+### v2.1.1 (2025-06-29)
+
+**🐛 Bug Fixes & Improvements**
+- Fixed `healthCheck` URL in API client — no longer hardcoded to localhost:2047
+- Fixed Sidebar to display real user name/role instead of hardcoded "John Doe"
+- Fixed Settings profile page to show actual logged-in user data
+- Connected Audit Log page to real backend API with fallback to demo data
+- Connected Emission Factors page to backend API with live data indicator
+- Connected Signatures page to backend API for real signature history
+- Connected Data Import page with functional file upload (drag & drop + browse)
+- Connected Data Export page with real project list from API
+- All project dropdowns now load from API instead of hardcoded options
+
+**🎯 ESG Goals (MS Cloud / SAP style)**
+- Goal tracking with SBTi/Paris-aligned targets
+- Progress visualization with cost tracking
+- Sugar factory demo: 5 pre-configured ESG goals
+
+**📊 Sugar Factory Demo Data**
+- 16 activities across all 3 scopes (combustion, electricity, supply chain)
+- CFP result: 2.026 kgCO2e per 500g sugar bag
+- CFO result: 219,306 kgCO2e total annual footprint
+- 5 ESG goals, 6 custom emission factors, 3 grid emission factors
+- Full audit trail and compliance reports
+
+**🧪 Testing**
+- Comprehensive Playwright E2E test suite for sugar factory demo
+- Full user journey: Auth → Dashboard → Projects → Activities → Calculations → Reports → Goals → Analytics
+- Multi-role access testing (owner, editor, auditor)
+- Responsive design tests (mobile, tablet, desktop)
+
+---
+
+## �📄 License
 
 MIT License - see [LICENSE](LICENSE)
 

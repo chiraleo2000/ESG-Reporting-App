@@ -28,6 +28,7 @@ import { Input, Select, Toggle, Checkbox } from '@/components/ui/Input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { Badge } from '@/components/ui/Badge';
 import { useThemeStore, type ThemeMode, type AccentColor } from '@/store/themeStore';
+import { useAppStore } from '@/store/appStore';
 
 const container = {
   hidden: { opacity: 0 },
@@ -74,6 +75,11 @@ export const Settings: React.FC = () => {
     setCompactMode,
     setAnimationsEnabled,
   } = useThemeStore();
+  const { user } = useAppStore();
+
+  const userInitials = user?.name ? user.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() : 'U';
+  const userFirstName = user?.name ? user.name.split(' ')[0] || '' : '';
+  const userLastName = user?.name ? user.name.split(' ').slice(1).join(' ') || '' : '';
 
   const handleClearDemoData = async () => {
     if (!confirm('Are you sure you want to clear all demo data? This action cannot be undone.')) {
@@ -353,7 +359,7 @@ export const Settings: React.FC = () => {
                   <div className="space-y-4 mt-4">
                     <div className="flex items-center gap-4">
                       <div className="w-20 h-20 rounded-full bg-grass-500 flex items-center justify-center text-white text-2xl font-bold">
-                        JD
+                        {userInitials}
                       </div>
                       <div>
                         <Button variant="outline" size="sm">
@@ -365,12 +371,12 @@ export const Settings: React.FC = () => {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      <Input label="First Name" defaultValue="John" />
-                      <Input label="Last Name" defaultValue="Doe" />
+                      <Input label="First Name" defaultValue={userFirstName} />
+                      <Input label="Last Name" defaultValue={userLastName} />
                     </div>
-                    <Input label="Email" type="email" defaultValue="john.doe@company.com" />
-                    <Input label="Job Title" defaultValue="Sustainability Manager" />
-                    <Input label="Organization" defaultValue="Acme Corporation" />
+                    <Input label="Email" type="email" defaultValue={user?.email || ''} />
+                    <Input label="Job Title" defaultValue={user?.role || 'Viewer'} />
+                    <Input label="Organization" defaultValue={user?.company || ''} />
                   </div>
                   <div className="mt-6">
                     <Button variant="primary">Save Changes</Button>

@@ -23,6 +23,7 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
+import { auditLogsApi, projectsApi } from '@/lib/api';
 
 const container = {
   hidden: { opacity: 0 },
@@ -187,8 +188,50 @@ export const AuditLog: React.FC = () => {
   const [actionFilter, setActionFilter] = useState('all');
   const [entityFilter, setEntityFilter] = useState('all');
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [auditLogs, setAuditLogs] = useState(demoAuditLogs);
+  const [loading, setLoading] = useState(false);
 
-  const filteredLogs = demoAuditLogs.filter((log) => {
+  // Fetch audit logs from API
+  const fetchAuditLogs = async () => {
+    setLoading(true);
+    try {
+      // Try to get project-level audit logs
+      const projectsRes = await projectsApi.getAll();
+      if (projectsRes.success && projectsRes.data) {
+        const projects = Array.isArray(projectsRes.data) ? projectsRes.data : (projectsRes.data as any).projects || [];
+        if (projects.length > 0) {
+          const logsRes = await auditLogsApi.getByProject(projects[0].id);
+          if (logsRes.success && logsRes.data) {
+            const logs = Array.isArray(logsRes.data) ? logsRes.data : (logsRes.data as any).logs || [];
+            if (logs.length > 0) {
+              setAuditLogs(logs.map((log: any) => ({
+                id: log.id,
+                action: (log.action || 'UPDATE').toUpperCase(),
+                entityType: log.entity_type || log.entityType || 'activity',
+                entityName: log.details?.name || log.entity_id || 'Unknown',
+                user: log.user_name || log.details?.user || 'User',
+                userEmail: log.user_email || '',
+                projectName: log.project_name || projects[0]?.name || 'Project',
+                timestamp: log.created_at || new Date().toISOString(),
+                details: log.details || {},
+                ipAddress: log.ip_address || '127.0.0.1',
+              })));
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.log('Using demo audit log data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAuditLogs();
+  }, []);
+
+  const filteredLogs = auditLogs.filter((log) => {
     const matchesSearch = log.entityName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          log.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (log.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false);
@@ -207,8 +250,8 @@ export const AuditLog: React.FC = () => {
     });
   };
 
-  const uniqueActions = [...new Set(demoAuditLogs.map(l => l.action))];
-  const uniqueEntities = [...new Set(demoAuditLogs.map(l => l.entityType))];
+  const uniqueActions = [...new Set(auditLogs.map(l => l.action))];
+  const uniqueEntities = [...new Set(auditLogs.map(l => l.entityType))];
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
@@ -226,8 +269,8 @@ export const AuditLog: React.FC = () => {
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
-          <Button variant="outline" size="sm">
-            <RefreshCw className="w-4 h-4 mr-2" />
+          <Button variant="outline" size="sm" onClick={fetchAuditLogs} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </div>
@@ -242,7 +285,7 @@ export const AuditLog: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-earth-500">Total Events</p>
-              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{demoAuditLogs.length}</p>
+              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{auditLogs.length}</p>
             </div>
           </div>
         </Card>
@@ -254,7 +297,7 @@ export const AuditLog: React.FC = () => {
             <div>
               <p className="text-sm text-earth-500">Created</p>
               <p className="text-xl font-bold text-earth-800 dark:text-earth-100">
-                {demoAuditLogs.filter(l => l.action === 'CREATE').length}
+                {auditLogs.filter(l => l.action === 'CREATE').length}
               </p>
             </div>
           </div>
@@ -267,7 +310,7 @@ export const AuditLog: React.FC = () => {
             <div>
               <p className="text-sm text-earth-500">Modified</p>
               <p className="text-xl font-bold text-earth-800 dark:text-earth-100">
-                {demoAuditLogs.filter(l => l.action === 'UPDATE').length}
+                {auditLogs.filter(l => l.action === 'UPDATE').length}
               </p>
             </div>
           </div>
@@ -280,7 +323,7 @@ export const AuditLog: React.FC = () => {
             <div>
               <p className="text-sm text-earth-500">Reports Generated</p>
               <p className="text-xl font-bold text-earth-800 dark:text-earth-100">
-                {demoAuditLogs.filter(l => l.action === 'GENERATE_REPORT').length}
+                {auditLogs.filter(l => l.action === 'GENERATE_REPORT').length}
               </p>
             </div>
           </div>

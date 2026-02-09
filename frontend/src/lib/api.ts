@@ -463,7 +463,8 @@ export const goalsApi = {
 // Health check
 export const healthCheck = async (): Promise<boolean> => {
   try {
-    const response = await fetch('http://localhost:2047/health');
+    const baseUrl = API_BASE_URL.replace(/\/api\/v1$/, '');
+    const response = await fetch(`${baseUrl}/health`);
     return response.ok;
   } catch {
     return false;

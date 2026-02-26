@@ -1,6 +1,6 @@
 # Open ESG Reporting Application — Specification Kit
 
-> **Version:** 3.0.0  
+> **Version:** 0.2.0  
 > **License:** Apache 2.0  
 > **Last Updated:** 2026-02-26  
 

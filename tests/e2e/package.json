@@ -1,6 +1,6 @@
 {
   "name": "@esg-app/e2e-tests",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "End-to-end tests for ESG Reporting App",
   "scripts": {
     "test": "jest --config jest.config.js",

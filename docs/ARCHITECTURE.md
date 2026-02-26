@@ -1,6 +1,6 @@
 # Open ESG Reporting Application — Architecture & Design Specification
 
-> **Version:** 3.0.0 | **License:** Apache 2.0 | **Last Updated:** 2025-02-26
+> **Version:** 0.2.0 | **License:** Apache 2.0 | **Last Updated:** 2025-02-26
 
 ---
 

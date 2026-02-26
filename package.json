@@ -1,6 +1,6 @@
 {
   "name": "esg-reporting-app",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "ESG Carbon Accounting & Reporting Platform - GHG Protocol compliant emissions tracking with EU CBAM, Thai ESG, K-ESG support",
   "private": true,
   "scripts": {

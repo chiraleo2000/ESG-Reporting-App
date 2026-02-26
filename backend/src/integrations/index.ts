@@ -5,37 +5,18 @@
  * from REST APIs, SSH/SFTP servers, and file uploads.
  */
 
-// Import classes needed locally for createConnector factory
-import { RestApiConnector } from './restApiConnector';
-import { SshConnector } from './sshConnector';
-import { FileParser } from './fileParser';
 import { logger } from '../utils/logger';
-
-// Import types needed locally for function signatures
-import type { ConnectorType, IDataConnector } from './types';
+import type { IDataConnector } from './types';
 
 // Re-export types from central types module
 export type { ConnectorType, DataSourceConfig, ConnectorResult, IDataConnector } from './types';
 
-// Re-export connector classes
+// Re-export connector factory and classes
+export { createConnector } from './connectorFactory';
 export { RestApiConnector } from './restApiConnector';
 export { SshConnector } from './sshConnector';
 export { FileParser } from './fileParser';
 export { SyncScheduler } from './syncScheduler';
-
-// Connector factory
-export function createConnector(type: ConnectorType): IDataConnector {
-  switch (type) {
-    case 'rest_api':
-      return new RestApiConnector();
-    case 'ssh_sftp':
-      return new SshConnector();
-    case 'file_upload':
-      return new FileParser();
-    default:
-      throw new Error(`Unknown connector type: ${type}`);
-  }
-}
 
 // Registry of active connectors
 const activeConnectors = new Map<string, IDataConnector>();

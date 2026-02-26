@@ -7,7 +7,7 @@
 
 import * as cron from 'node-cron';
 import { logger } from '../utils/logger';
-import { createConnector } from './index';
+import { createConnector } from './connectorFactory';
 import type { ConnectorType, ConnectorResult } from './types';
 import { db } from '../config/database';
 import { generateId } from '../utils/helpers';

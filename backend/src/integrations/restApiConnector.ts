@@ -52,27 +52,28 @@ export class RestApiConnector implements IDataConnector {
     try {
       this.config = config as RestApiConfig;
       
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...this.config.headers,
+      };
+
       const axiosConfig: AxiosRequestConfig = {
         baseURL: this.config.baseUrl,
         timeout: this.config.timeout || 30000,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          ...this.config.headers,
-        },
       };
 
       // Configure authentication
       switch (this.config.authType) {
         case 'bearer':
           if (this.config.authToken) {
-            axiosConfig.headers!['Authorization'] = `Bearer ${this.config.authToken}`;
+            headers['Authorization'] = `Bearer ${this.config.authToken}`;
           }
           break;
         case 'api_key':
           if (this.config.apiKey) {
             const headerName = this.config.apiKeyHeader || 'X-API-Key';
-            axiosConfig.headers![headerName] = this.config.apiKey;
+            headers[headerName] = this.config.apiKey;
           }
           break;
         case 'basic':
@@ -86,10 +87,12 @@ export class RestApiConnector implements IDataConnector {
         case 'oauth2':
           if (this.config.oauth2) {
             const token = await this.getOAuth2Token(this.config.oauth2);
-            axiosConfig.headers!['Authorization'] = `Bearer ${token}`;
+            headers['Authorization'] = `Bearer ${token}`;
           }
           break;
       }
+
+      axiosConfig.headers = headers;
 
       this.client = axios.create(axiosConfig);
       

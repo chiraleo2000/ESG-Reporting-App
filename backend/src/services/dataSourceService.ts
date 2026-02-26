@@ -6,7 +6,6 @@
  */
 
 import { db } from '../config/database';
-import { cache } from '../config/redis';
 import { logger } from '../utils/logger';
 import { generateId } from '../utils/helpers';
 import { 

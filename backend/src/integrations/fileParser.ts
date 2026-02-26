@@ -6,10 +6,10 @@
  * and validation.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { logger } from '../utils/logger';
-import type { IDataConnector } from './index';
+import type { IDataConnector } from './types';
 
 // Supported file types
 export type SupportedFileType = 'csv' | 'xlsx' | 'xls' | 'json';
@@ -67,16 +67,18 @@ export class FileParser implements IDataConnector {
       try {
         const mapped: Record<string, any> = {};
         for (const [targetField, sourceField] of Object.entries(mapping)) {
-          if (item[sourceField] !== undefined) {
-            mapped[targetField] = item[sourceField];
-          } else {
+          let value = item[sourceField];
+          if (value === undefined) {
             // Try case-insensitive match
             const key = Object.keys(item).find(
               k => k.toLowerCase() === sourceField.toLowerCase()
             );
             if (key) {
-              mapped[targetField] = item[key];
+              value = item[key];
             }
+          }
+          if (value !== undefined) {
+            mapped[targetField] = value;
           }
         }
         return mapped;
@@ -87,60 +89,79 @@ export class FileParser implements IDataConnector {
     }).filter(Boolean);
   }
 
+  // Validation helpers to reduce cognitive complexity
+
+  private static readonly VALID_SCOPES = new Set([
+    'scope_1', 'scope_2', 'scope_3', 'Scope 1', 'Scope 2', 'Scope 3', '1', '2', '3',
+  ]);
+
+  private checkRequiredFields(item: any): string | null {
+    if (!item.name && !item.activity_name && !item.description) {
+      return 'Missing activity name/description';
+    }
+    return null;
+  }
+
+  private checkScope(item: any): string | null {
+    const scope = item.scope || item.emission_scope;
+    if (scope && !FileParser.VALID_SCOPES.has(String(scope))) {
+      return `Invalid scope: ${scope}`;
+    }
+    return null;
+  }
+
+  private checkNumericField(value: any, fieldName: string): string | null {
+    if (value !== undefined && value !== null && value !== '') {
+      const num = Number(value);
+      if (Number.isNaN(num) || num < 0) {
+        return `Invalid ${fieldName}: ${value}`;
+      }
+    }
+    return null;
+  }
+
+  private validateRecord(item: any): string[] {
+    const errors: string[] = [];
+    const requiredError = this.checkRequiredFields(item);
+    if (requiredError) errors.push(requiredError);
+
+    const scopeError = this.checkScope(item);
+    if (scopeError) errors.push(scopeError);
+
+    const quantityError = this.checkNumericField(item.quantity, 'quantity');
+    if (quantityError) errors.push(quantityError);
+
+    const factorError = this.checkNumericField(item.emission_factor, 'emission factor');
+    if (factorError) errors.push(factorError);
+
+    return errors;
+  }
+
+  private normalizeRecord(item: any): any {
+    if (item.scope) {
+      item.scope = this.normalizeScope(item.scope);
+    }
+    if (item.quantity) item.quantity = Number(item.quantity);
+    if (item.emission_factor) item.emission_factor = Number(item.emission_factor);
+    return item;
+  }
+
   async validate(data: any[]): Promise<{ valid: any[]; errors: any[] }> {
     const valid: any[] = [];
     const errors: any[] = [];
 
     for (let i = 0; i < data.length; i++) {
-      const item = data[i];
-      const itemErrors: string[] = [];
-
-      // Required fields check
-      if (!item.name && !item.activity_name && !item.description) {
-        itemErrors.push('Missing activity name/description');
-      }
-
-      // Scope validation
-      const scope = item.scope || item.emission_scope;
-      if (scope) {
-        const validScopes = ['scope_1', 'scope_2', 'scope_3', 'Scope 1', 'Scope 2', 'Scope 3', '1', '2', '3'];
-        if (!validScopes.includes(String(scope))) {
-          itemErrors.push(`Invalid scope: ${scope}`);
-        }
-      }
-
-      // Numeric validation
-      if (item.quantity !== undefined && item.quantity !== null && item.quantity !== '') {
-        const num = Number(item.quantity);
-        if (isNaN(num) || num < 0) {
-          itemErrors.push(`Invalid quantity: ${item.quantity}`);
-        }
-      }
-
-      if (item.emission_factor !== undefined && item.emission_factor !== null && item.emission_factor !== '') {
-        const num = Number(item.emission_factor);
-        if (isNaN(num) || num < 0) {
-          itemErrors.push(`Invalid emission factor: ${item.emission_factor}`);
-        }
-      }
+      const itemErrors = this.validateRecord(data[i]);
 
       if (itemErrors.length > 0) {
         errors.push({
           row: i + 1,
           field: 'multiple',
           message: itemErrors.join('; '),
-          data: item,
+          data: data[i],
         });
       } else {
-        // Normalize scope value
-        if (item.scope) {
-          item.scope = this.normalizeScope(item.scope);
-        }
-        // Convert numeric strings
-        if (item.quantity) item.quantity = Number(item.quantity);
-        if (item.emission_factor) item.emission_factor = Number(item.emission_factor);
-        
-        valid.push(item);
+        valid.push(this.normalizeRecord(data[i]));
       }
     }
 
@@ -165,9 +186,15 @@ export class FileParser implements IDataConnector {
   }
 
   private async parseCsv(config: FileParserConfig): Promise<any[]> {
-    const content = config.fileBuffer
-      ? config.fileBuffer.toString(config.encoding || 'utf-8')
-      : fs.readFileSync(config.filePath!, config.encoding || 'utf-8');
+    const encoding = config.encoding || 'utf-8';
+    let content: string;
+    if (config.fileBuffer) {
+      content = config.fileBuffer.toString(encoding);
+    } else if (config.filePath) {
+      content = fs.readFileSync(config.filePath, encoding);
+    } else {
+      throw new Error('File path or buffer is required');
+    }
 
     const delimiter = config.csvDelimiter || this.detectDelimiter(content);
     const lines = content.split(/\r?\n/).filter(line => line.trim());
@@ -184,7 +211,7 @@ export class FileParser implements IDataConnector {
 
     for (let i = dataStartIndex; i < lines.length; i++) {
       const values = this.parseCsvLine(lines[i], delimiter);
-      if (values.length === 0 || values.every(v => !v.trim())) continue;
+      if (values.every(v => !v.trim())) continue;
 
       const record: Record<string, any> = {};
       headers.forEach((header, idx) => {
@@ -240,8 +267,10 @@ export class FileParser implements IDataConnector {
       let workbook;
       if (config.fileBuffer) {
         workbook = XLSX.read(config.fileBuffer, { type: 'buffer' });
+      } else if (config.filePath) {
+        workbook = XLSX.readFile(config.filePath);
       } else {
-        workbook = XLSX.readFile(config.filePath!);
+        throw new Error('File path or buffer is required');
       }
 
       const sheetName = typeof config.excelSheet === 'string'
@@ -265,9 +294,15 @@ export class FileParser implements IDataConnector {
   }
 
   private async parseJson(config: FileParserConfig): Promise<any[]> {
-    const content = config.fileBuffer
-      ? config.fileBuffer.toString(config.encoding || 'utf-8')
-      : fs.readFileSync(config.filePath!, config.encoding || 'utf-8');
+    const encoding = config.encoding || 'utf-8';
+    let content: string;
+    if (config.fileBuffer) {
+      content = config.fileBuffer.toString(encoding);
+    } else if (config.filePath) {
+      content = fs.readFileSync(config.filePath, encoding);
+    } else {
+      throw new Error('File path or buffer is required');
+    }
 
     const parsed = JSON.parse(content);
 

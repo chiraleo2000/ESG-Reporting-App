@@ -175,7 +175,7 @@ describe('Workflow & Data Flow Tests', () => {
       // With seasonal variation
       const months = Array.from({ length: 12 }, (_, idx) => {
         const factor = 0.85 + Math.sin(idx * 0.8) * 0.15;
-        return parseFloat((monthlyAvg * factor).toFixed(1));
+        return Number.parseFloat((monthlyAvg * factor).toFixed(1));
       });
       expect(months).toHaveLength(12);
       expect(months.every(m => m > 0)).toBe(true);
@@ -407,11 +407,11 @@ describe('Workflow & Data Flow Tests', () => {
 
   describe('Data Validation', () => {
     it('should validate emission quantity ranges', () => {
-      const validate = (qty: number) => qty >= 0 && qty <= 1e12 && !isNaN(qty);
+      const validate = (qty: number) => qty >= 0 && qty <= 1e12 && !Number.isNaN(qty);
       expect(validate(100)).toBe(true);
       expect(validate(0)).toBe(true);
       expect(validate(-1)).toBe(false);
-      expect(validate(NaN)).toBe(false);
+      expect(validate(Number.NaN)).toBe(false);
     });
 
     it('should validate year ranges for reporting', () => {
@@ -422,9 +422,9 @@ describe('Workflow & Data Flow Tests', () => {
     });
 
     it('should validate scope classification', () => {
-      const validScopes = ['scope1', 'scope2', 'scope3'];
-      expect(validScopes.includes('scope1')).toBe(true);
-      expect(validScopes.includes('scope4')).toBe(false);
+      const validScopes = new Set(['scope1', 'scope2', 'scope3']);
+      expect(validScopes.has('scope1')).toBe(true);
+      expect(validScopes.has('scope4')).toBe(false);
     });
 
     it('should validate user roles', () => {

@@ -8,7 +8,7 @@
 
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { logger } from '../utils/logger';
-import type { IDataConnector } from './index';
+import type { IDataConnector } from './types';
 
 export interface RestApiConfig {
   baseUrl: string;

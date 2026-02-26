@@ -10,12 +10,12 @@
  * consider using ssh2 npm package for full SFTP support.
  */
 
-import { exec, execFile } from 'child_process';
-import { promisify } from 'util';
-import * as fs from 'fs';
-import * as path from 'path';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { logger } from '../utils/logger';
-import type { IDataConnector } from './index';
+import type { IDataConnector } from './types';
 import { FileParser } from './fileParser';
 
 const execAsync = promisify(exec);
@@ -38,7 +38,7 @@ export interface SshConfig {
 export class SshConnector implements IDataConnector {
   private config: SshConfig | null = null;
   private localDownloadPath: string = '';
-  private fileParser: FileParser;
+  private readonly fileParser: FileParser;
 
   constructor() {
     this.fileParser = new FileParser();
@@ -201,15 +201,13 @@ export class SshConnector implements IDataConnector {
       parts.push(`-i "${this.config.privateKeyPath}"`);
     }
 
-    // Connect timeout
+    // Connect timeout, user@host, and remote command
     const timeout = Math.floor((this.config.connectTimeout || 10000) / 1000);
-    parts.push(`-o ConnectTimeout=${timeout}`);
-
-    // User@Host
-    parts.push(`${this.config.username}@${this.config.host}`);
-
-    // Remote command
-    parts.push(`"${remoteCommand}"`);
+    parts.push(
+      `-o ConnectTimeout=${timeout}`,
+      `${this.config.username}@${this.config.host}`,
+      `"${remoteCommand}"`
+    );
 
     return parts.join(' ');
   }

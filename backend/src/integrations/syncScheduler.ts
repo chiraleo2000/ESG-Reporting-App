@@ -7,7 +7,8 @@
 
 import * as cron from 'node-cron';
 import { logger } from '../utils/logger';
-import { createConnector, type ConnectorType, type ConnectorResult } from './index';
+import { createConnector } from './index';
+import type { ConnectorType, ConnectorResult } from './types';
 import { db } from '../config/database';
 import { generateId } from '../utils/helpers';
 
@@ -252,10 +253,10 @@ async function importActivityRecord(projectId: string, record: any): Promise<voi
 }
 
 export class SyncScheduler {
-  static schedule = scheduleSync;
-  static execute = executeSyncJob;
-  static stop = stopSync;
-  static stopAll = stopAllSyncs;
-  static getStatus = getSyncStatus;
-  static getAllStatuses = getAllSyncStatuses;
+  static readonly schedule = scheduleSync;
+  static readonly execute = executeSyncJob;
+  static readonly stop = stopSync;
+  static readonly stopAll = stopAllSyncs;
+  static readonly getStatus = getSyncStatus;
+  static readonly getAllStatuses = getAllSyncStatuses;
 }

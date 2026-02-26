@@ -5,45 +5,23 @@
  * from REST APIs, SSH/SFTP servers, and file uploads.
  */
 
+// Import classes needed locally for createConnector factory
 import { RestApiConnector } from './restApiConnector';
 import { SshConnector } from './sshConnector';
 import { FileParser } from './fileParser';
-import { SyncScheduler } from './syncScheduler';
 import { logger } from '../utils/logger';
 
-// Connector types
-export type ConnectorType = 'rest_api' | 'ssh_sftp' | 'file_upload';
+// Import types needed locally for function signatures
+import type { ConnectorType, IDataConnector } from './types';
 
-// Base connector interface
-export interface DataSourceConfig {
-  id: string;
-  name: string;
-  type: ConnectorType;
-  projectId: string;
-  config: Record<string, any>;
-  schedule?: string; // cron expression
-  mapping?: Record<string, string>; // field mapping rules
-  enabled: boolean;
-  lastSyncAt?: Date;
-  lastSyncStatus?: 'success' | 'error' | 'pending';
-  lastSyncError?: string;
-}
+// Re-export types from central types module
+export type { ConnectorType, DataSourceConfig, ConnectorResult, IDataConnector } from './types';
 
-export interface ConnectorResult {
-  success: boolean;
-  recordsProcessed: number;
-  recordsFailed: number;
-  errors: Array<{ row?: number; field?: string; message: string }>;
-  data?: any[];
-}
-
-export interface IDataConnector {
-  connect(config: Record<string, any>): Promise<boolean>;
-  fetchData(config: Record<string, any>): Promise<any[]>;
-  parseData(rawData: any[], mapping?: Record<string, string>): Promise<any[]>;
-  validate(data: any[]): Promise<{ valid: any[]; errors: any[] }>;
-  disconnect(): Promise<void>;
-}
+// Re-export connector classes
+export { RestApiConnector } from './restApiConnector';
+export { SshConnector } from './sshConnector';
+export { FileParser } from './fileParser';
+export { SyncScheduler } from './syncScheduler';
 
 // Connector factory
 export function createConnector(type: ConnectorType): IDataConnector {
@@ -85,10 +63,3 @@ export function removeConnector(id: string): void {
 export function listConnectors(): string[] {
   return Array.from(activeConnectors.keys());
 }
-
-export {
-  RestApiConnector,
-  SshConnector,
-  FileParser,
-  SyncScheduler,
-};

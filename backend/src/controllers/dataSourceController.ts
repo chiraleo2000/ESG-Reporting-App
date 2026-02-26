@@ -6,7 +6,6 @@
  */
 
 import { Request, Response } from 'express';
-import { logger } from '../utils/logger';
 import { BadRequestError, NotFoundError } from '../middleware/errorHandler';
 import * as dataSourceService from '../services/dataSourceService';
 import type { ConnectorType } from '../integrations';

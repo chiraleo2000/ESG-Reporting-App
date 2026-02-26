@@ -1,10 +1,10 @@
-# 🌱 ESG Reporting Application
+# 🌱 Open ESG Reporting App
 
-A comprehensive **Environmental, Social, and Governance (ESG)** reporting platform for tracking, calculating, and reporting greenhouse gas (GHG) emissions following **GHG Protocol**, **EU CBAM**, and regional ESG standards.
+A comprehensive **Environmental, Social, and Governance (ESG)** reporting platform for tracking, calculating, and reporting greenhouse gas (GHG) emissions following **GHG Protocol**, **EU CBAM**, and regional ESG standards. Features external data integration via **REST API**, **SSH/SFTP**, and **manual file upload**.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
-[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
 [![Tests](https://img.shields.io/badge/Tests-912_passing-brightgreen.svg)](#-testing)
 [![Coverage](https://img.shields.io/badge/Coverage-95.82%25-brightgreen.svg)](#-testing)
 
@@ -19,9 +19,10 @@ A comprehensive **Environmental, Social, and Governance (ESG)** reporting platfo
 - **🧮 Built-in Calculator** - Tier 1/2/3 calculation methods with formula display
 - **📈 Analytics Dashboard** - Real-time trends, benchmarks, AI-powered insights with dynamic API data
 - **📑 Multi-Standard Compliance** - EU CBAM, UK CBAM, China Carbon Market, K-ESG, MAFF ESG, Thai ESG
-- **🎯 ESG Goals & Targets** - SBTi/Paris-aligned goal tracking with progress visualization, similar to MS Cloud for Sustainability
+- **🎯 ESG Goals & Targets** - SBTi/Paris-aligned goal tracking with progress visualization
 - **🔐 Role-Based Access** - Owner, Director, Editor, Viewer, Auditor roles
 - **📤 Import/Export** - CSV, JSON, Excel, PDF support with file parsing
+- **🔌 External Data Integration** - REST API, SSH/SFTP, and manual file upload with scheduled sync
 - **🔍 Vector Search** - AI-powered document similarity (pgvector)
 - **✍️ Digital Signatures** - Report approval workflow with cryptographic signatures
 
@@ -30,14 +31,15 @@ A comprehensive **Environmental, Social, and Governance (ESG)** reporting platfo
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
 ### Run with Docker
 
 ```bash
 # Clone repository
-git clone https://github.com/chiraleo2000/ESG-Reporting-App.git
-cd ESG-Reporting-App
+git clone https://github.com/chiraleo2000/Open-ESG-Reporting-app.git
+cd Open-ESG-Reporting-app
 
 # Start all services (database auto-seeds on first run)
 docker compose up -d
@@ -75,19 +77,19 @@ cd frontend && npm test
 
 | Email | Password | Role |
 |-------|----------|------|
-| admin@esgdemo.com | Demo@123 | Full admin access |
-| director@esgdemo.com | Demo@123 | Sustainability Director |
-| editor@esgdemo.com | Demo@123 | Project Editor |
-| viewer@esgdemo.com | Demo@123 | Read-only access |
-| auditor@esgdemo.com | Demo@123 | External Auditor |
+| <admin@esgdemo.com> | Demo@123 | Full admin access |
+| <director@esgdemo.com> | Demo@123 | Sustainability Director |
+| <editor@esgdemo.com> | Demo@123 | Project Editor |
+| <viewer@esgdemo.com> | Demo@123 | Read-only access |
+| <auditor@esgdemo.com> | Demo@123 | External Auditor |
 
 **Sugar Factory Demo** (50 tons/year white sugar, export to China):
 
 | Email | Password | Role |
 |-------|----------|------|
-| manager@thaisugar.co.th | Sugar@2024 | Factory Owner |
-| env@thaisugar.co.th | Sugar@2024 | Environmental Editor |
-| auditor@thaiaudit.co.th | Sugar@2024 | External Auditor |
+| <manager@thaisugar.co.th> | Sugar@2024 | Factory Owner |
+| <env@thaisugar.co.th> | Sugar@2024 | Environmental Editor |
+| <auditor@thaiaudit.co.th> | Sugar@2024 | External Auditor |
 
 **Note:** Demo accounts come with 3 sample projects, 30+ activities covering all scopes, and comprehensive emission factors. The sugar factory demo includes 16 activities across all 3 scopes with 219.3 tCO2e total emissions and 5 ESG goals.
 
@@ -102,6 +104,7 @@ esg-reporting-app/
 │   │   ├── controllers/    # Request handlers
 │   │   ├── routes/         # API endpoints
 │   │   ├── services/       # Business logic
+│   │   ├── integrations/   # External data connectors (REST, SSH, File)
 │   │   ├── db/             # Database seed
 │   │   └── config/         # Configuration
 │   └── Dockerfile
@@ -209,8 +212,8 @@ npx playwright test
 
 | Service | Port | URL |
 |---------|------|-----|
-| Frontend | 2048 | http://localhost:2048 |
-| Backend API | 2047 | http://localhost:2047/api/v1 |
+| Frontend | 2048 | <http://localhost:2048> |
+| Backend API | 2047 | <http://localhost:2047/api/v1> |
 | PostgreSQL | 5434 | localhost:5434 |
 | Redis | 6379 | localhost:6379 |
 
@@ -251,10 +254,34 @@ docker compose up -d
 ---
 
 ## � Changelog
+### v3.0.0 (2026-02-26)
 
+**🔌 External Data Integration Layer**
+
+- REST API connector with OAuth2, Bearer, API Key, and Basic auth
+- SSH/SFTP connector for remote file transfer with key/password auth
+- Manual file upload with CSV/Excel/JSON parsing and validation
+- Sync scheduler with cron-based scheduling and audit trail
+- Connector registry with factory pattern for extensibility
+- Full CRUD API for data source management (`/api/v1/data-sources`)
+- Database schema: `data_sources` table with type/status enums
+
+**🏗️ Architecture Improvements**
+
+- Integration layer (`backend/src/integrations/`) with connector pattern
+- Data source service with connection testing and sync orchestration
+- Role-based authorization (owner, director, editor) for data source operations
+- Pagination, retry logic, and JSONPath extraction for REST connectors
+
+**🧪 Testing**
+
+- 822 backend tests across 32 suites — all passing
+- 90 frontend tests across 3 suites — all passing
+- Fixed TypeScript type errors in data source routes
 ### v2.1.1 (2025-06-29)
 
 **🐛 Bug Fixes & Improvements**
+
 - Fixed `healthCheck` URL in API client — no longer hardcoded to localhost:2047
 - Fixed Sidebar to display real user name/role instead of hardcoded "John Doe"
 - Fixed Settings profile page to show actual logged-in user data
@@ -266,11 +293,13 @@ docker compose up -d
 - All project dropdowns now load from API instead of hardcoded options
 
 **🎯 ESG Goals (MS Cloud / SAP style)**
+
 - Goal tracking with SBTi/Paris-aligned targets
 - Progress visualization with cost tracking
 - Sugar factory demo: 5 pre-configured ESG goals
 
 **📊 Sugar Factory Demo Data**
+
 - 16 activities across all 3 scopes (combustion, electricity, supply chain)
 - CFP result: 2.026 kgCO2e per 500g sugar bag
 - CFO result: 219,306 kgCO2e total annual footprint
@@ -278,6 +307,7 @@ docker compose up -d
 - Full audit trail and compliance reports
 
 **🧪 Testing**
+
 - Comprehensive Playwright E2E test suite for sugar factory demo
 - Full user journey: Auth → Dashboard → Projects → Activities → Calculations → Reports → Goals → Analytics
 - Multi-role access testing (owner, editor, auditor)
@@ -287,7 +317,7 @@ docker compose up -d
 
 ## �📄 License
 
-MIT License - see [LICENSE](LICENSE)
+Apache License 2.0 - see [LICENSE](LICENSE)
 
 ---
 

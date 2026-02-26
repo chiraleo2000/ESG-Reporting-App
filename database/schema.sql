@@ -1430,6 +1430,40 @@ CREATE TRIGGER update_esg_goals_updated_at BEFORE UPDATE ON esg_goals
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================
+-- DATA SOURCES TABLE (External Data Integration)
+-- ============================================
+
+CREATE TYPE data_source_type AS ENUM ('rest_api', 'ssh_sftp', 'file_upload');
+CREATE TYPE sync_status AS ENUM ('pending', 'success', 'error', 'running');
+
+CREATE TABLE IF NOT EXISTS data_sources (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  type data_source_type NOT NULL,
+  config JSONB NOT NULL DEFAULT '{}',
+  schedule VARCHAR(100),  -- cron expression
+  mapping JSONB DEFAULT '{}',  -- field mapping rules
+  enabled BOOLEAN DEFAULT TRUE,
+  last_sync_at TIMESTAMP,
+  last_sync_status sync_status DEFAULT 'pending',
+  last_sync_error TEXT,
+  last_sync_records_processed INTEGER DEFAULT 0,
+  last_sync_records_failed INTEGER DEFAULT 0,
+  created_by UUID NOT NULL REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_data_sources_project ON data_sources(project_id);
+CREATE INDEX IF NOT EXISTS idx_data_sources_type ON data_sources(type);
+CREATE INDEX IF NOT EXISTS idx_data_sources_enabled ON data_sources(enabled);
+
+-- Data Sources update trigger
+CREATE TRIGGER update_data_sources_updated_at BEFORE UPDATE ON data_sources 
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
 -- SEED CBAM DEFAULT VALUES
 -- ============================================
 

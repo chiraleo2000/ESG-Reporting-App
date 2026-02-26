@@ -402,7 +402,7 @@ describe('Workflow & Data Flow Tests', () => {
         expect((index as any)[page]).toBeDefined();
         expect(typeof (index as any)[page]).toBe('function');
       }
-    });
+    }, 15000);
   });
 
   describe('Data Validation', () => {

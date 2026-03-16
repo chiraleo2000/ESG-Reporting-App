@@ -84,10 +84,10 @@ const DEFAULT_EMISSION_FACTORS: Record<string, Record<string, number>> = {
     // Distance-based factors (km)
     'km_car_petrol': 0.17,
     'km_car_diesel': 0.16,
-    'km_car_hybrid': 0.10,
+    'km_car_hybrid': 0.1,
     'km_car_electric': 0.05, // Depends on grid factor
     'km_motorcycle': 0.08,
-    'km_van_small': 0.20,
+    'km_van_small': 0.2,
     'km_van_large': 0.28,
     'km_truck_small': 0.45,
     'km_truck_medium': 0.65,
@@ -167,14 +167,14 @@ const DEFAULT_EMISSION_FACTORS: Record<string, Record<string, number>> = {
     'gj': 116.67,
     // Regional defaults (can be overridden by grid factors)
     'kwh_thailand': 0.4561,
-    'kwh_china': 0.5810,
-    'kwh_japan': 0.4570,
-    'kwh_korea': 0.4590,
-    'kwh_germany': 0.3660,
-    'kwh_uk': 0.2070,
-    'kwh_usa': 0.3890,
-    'kwh_eu': 0.2760,
-    'kwh_india': 0.7200,
+    'kwh_china': 0.581,
+    'kwh_japan': 0.457,
+    'kwh_korea': 0.459,
+    'kwh_germany': 0.366,
+    'kwh_uk': 0.207,
+    'kwh_usa': 0.389,
+    'kwh_eu': 0.276,
+    'kwh_india': 0.72,
   },
 
   // Scope 2 Cat 2: Purchased Steam
@@ -223,20 +223,20 @@ const DEFAULT_EMISSION_FACTORS: Record<string, Record<string, number>> = {
     'cny': 0.07,
     'thb': 0.015,
     // Material-based factors (kg CO2e per kg)
-    'kg_generic': 2.0,
+    'kg_generic': 2,
     'kg_paper': 1.2,
     'kg_plastic': 3.5,
     'kg_metal': 2.8,
     'kg_chemicals': 2.5,
-    'kg_textiles': 15.0,
-    'kg_electronics': 20.0,
+    'kg_textiles': 15,
+    'kg_electronics': 20,
     'kg_food': 2.5,
     'kg_beverages': 0.8,
     'kg_furniture': 1.5,
     // Service-based
-    'consulting_hour': 5.0,
-    'it_service_hour': 3.0,
-    'kg': 2.0,
+    'consulting_hour': 5,
+    'it_service_hour': 3,
+    'kg': 2,
   },
 
   // Scope 3 Cat 2: Capital Goods
@@ -249,8 +249,8 @@ const DEFAULT_EMISSION_FACTORS: Record<string, Record<string, number>> = {
     'server_unit': 1500,
     'machinery_tonne': 3000,
     'building_m2': 400,
-    'equipment_kg': 3.0,
-    'kg': 3.0,
+    'equipment_kg': 3,
+    'kg': 3,
   },
 
   // Scope 3 Cat 3: Fuel & Energy Related Activities (not in Scope 1 or 2)
@@ -275,12 +275,12 @@ const DEFAULT_EMISSION_FACTORS: Record<string, Record<string, number>> = {
     'tonne_km_sea_container': 0.015,
     'tonne_km_sea_bulk': 0.008,
     'tonne_km_air': 0.6,
-    'tonne_km_air_short': 1.0,
+    'tonne_km_air_short': 1,
     'tonne_km_air_long': 0.5,
     'tonne_km': 0.1,
     // Per package/shipment
     'package_domestic': 0.5,
-    'package_international': 2.0,
+    'package_international': 2,
   },
 
   // Scope 3 Cat 5: Waste Generated in Operations
@@ -307,7 +307,7 @@ const DEFAULT_EMISSION_FACTORS: Record<string, Record<string, number>> = {
     // Air travel (per passenger-km)
     'km_air_short': 0.255, // <500km
     'km_air_medium': 0.195, // 500-1500km
-    'km_air_long': 0.150, // >1500km
+    'km_air_long': 0.15, // >1500km
     'km_air_domestic': 0.246,
     'km_air_international': 0.195,
     'km_air': 0.195,
@@ -324,9 +324,9 @@ const DEFAULT_EMISSION_FACTORS: Record<string, Record<string, number>> = {
     'km_bus': 0.089,
     'km_rental_car': 0.18,
     // Accommodation
-    'hotel_night': 31.0,
-    'hotel_night_luxury': 60.0,
-    'hotel_night_budget': 15.0,
+    'hotel_night': 31,
+    'hotel_night_luxury': 60,
+    'hotel_night_budget': 15,
     'km': 0.195,
     'miles': 0.314,
   },
@@ -337,12 +337,12 @@ const DEFAULT_EMISSION_FACTORS: Record<string, Record<string, number>> = {
     'km_car': 0.17,
     'km_car_petrol': 0.18,
     'km_car_diesel': 0.16,
-    'km_car_hybrid': 0.10,
+    'km_car_hybrid': 0.1,
     'km_car_electric': 0.05,
     'km_motorcycle': 0.08,
     'km_bus': 0.089,
     'km_train': 0.035,
-    'km_metro': 0.030,
+    'km_metro': 0.03,
     'km_tram': 0.028,
     'km_bike': 0,
     'km_walk': 0,
@@ -374,7 +374,7 @@ const DEFAULT_EMISSION_FACTORS: Record<string, Record<string, number>> = {
     'tonne_km_sea': 0.01,
     'tonne_km_air': 0.6,
     'delivery_small': 0.5,
-    'delivery_large': 2.0,
+    'delivery_large': 2,
   },
 
   // Scope 3 Cat 10: Processing of Sold Products
@@ -469,7 +469,7 @@ export async function lookupEmissionFactor(
 
   if (dbResult.rows.length > 0) {
     const result = {
-      factor: parseFloat(dbResult.rows[0].factor_value),
+      factor: Number.parseFloat(dbResult.rows[0].factor_value),
       source: dbResult.rows[0].source,
     };
     await redis.setex(cacheKey, 3600, JSON.stringify(result));
@@ -479,7 +479,7 @@ export async function lookupEmissionFactor(
   // Fall back to default factors
   const activityFactors = DEFAULT_EMISSION_FACTORS[activityType];
   if (activityFactors) {
-    const unitKey = unit.toLowerCase().replace(/\s+/g, '_');
+    const unitKey = unit.toLowerCase().replaceAll(/\s+/g, '_');
     const factor = activityFactors[unitKey];
     
     if (factor !== undefined) {
@@ -491,7 +491,7 @@ export async function lookupEmissionFactor(
 
   // Log warning and return conservative estimate
   logger.warn(`No emission factor found for ${activityType}/${unit}, using estimate`);
-  return { factor: 1.0, source: 'estimate' };
+  return { factor: 1, source: 'estimate' };
 }
 
 /**
@@ -519,7 +519,7 @@ export async function getGridEmissionFactor(
 
   if (result.rows.length > 0) {
     const data = {
-      factor: parseFloat(result.rows[0].factor_kg_co2_per_kwh),
+      factor: Number.parseFloat(result.rows[0].factor_kg_co2_per_kwh),
       source: result.rows[0].source,
     };
     await redis.setex(cacheKey, 86400, JSON.stringify(data));
@@ -537,7 +537,7 @@ export async function getGridEmissionFactor(
   if (prevResult.rows.length > 0) {
     logger.info(`Using ${prevResult.rows[0].year} grid EF for ${region} (${year} not found)`);
     return {
-      factor: parseFloat(prevResult.rows[0].factor_kg_co2_per_kwh),
+      factor: Number.parseFloat(prevResult.rows[0].factor_kg_co2_per_kwh),
       source: `${prevResult.rows[0].source} (${prevResult.rows[0].year})`,
     };
   }
@@ -570,7 +570,7 @@ export async function calculatePrecursors(
   let totalPrecursorEmissions = 0;
 
   for (const precursor of result.rows) {
-    const precursorFactor = parseFloat(precursor.factor_kg_co2_per_kg);
+    const precursorFactor = Number.parseFloat(precursor.factor_kg_co2_per_kg);
     
     // Convert quantity to kg if needed
     let quantityKg = quantity;
@@ -659,14 +659,14 @@ export async function getCBAMEmissionFactors(
   const cbamDefaults: Record<string, { direct: number; indirect: number; precursor: number }> = {
     cement: { direct: 0.525, indirect: 0.05, precursor: 0 },
     iron_steel: { direct: 1.85, indirect: 0.2, precursor: 0.3 },
-    aluminum: { direct: 1.5, indirect: 8.5, precursor: 1.0 },
+    aluminum: { direct: 1.5, indirect: 8.5, precursor: 1 },
     fertilizers: { direct: 1.6, indirect: 0.1, precursor: 0 },
     electricity: { direct: 0, indirect: 0.42, precursor: 0 },
-    hydrogen: { direct: 9.0, indirect: 0.5, precursor: 0 },
+    hydrogen: { direct: 9, indirect: 0.5, precursor: 0 },
   };
 
   const category = goodsCategory.toLowerCase();
-  const defaults = cbamDefaults[category] || { direct: 1.0, indirect: 0.2, precursor: 0.1 };
+  const defaults = cbamDefaults[category] || { direct: 1, indirect: 0.2, precursor: 0.1 };
 
   // Try to get country-specific factors from database
   const result = await db.query(
@@ -678,9 +678,9 @@ export async function getCBAMEmissionFactors(
   if (result.rows.length > 0) {
     const row = result.rows[0];
     return {
-      directEmissions: parseFloat(row.direct_emissions),
-      indirectEmissions: parseFloat(row.indirect_emissions),
-      precursorEmissions: parseFloat(row.precursor_emissions),
+      directEmissions: Number.parseFloat(row.direct_emissions),
+      indirectEmissions: Number.parseFloat(row.indirect_emissions),
+      precursorEmissions: Number.parseFloat(row.precursor_emissions),
       source: `cbam_${countryOfOrigin}`,
     };
   }
@@ -723,7 +723,7 @@ export async function aggregateProjectEmissions(projectId: string): Promise<{
   };
 
   for (const row of result.rows) {
-    const total = parseFloat(row.total) || 0;
+    const total = Number.parseFloat(row.total) || 0;
     
     switch (row.scope) {
       case 'scope1':

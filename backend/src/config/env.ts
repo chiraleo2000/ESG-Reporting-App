@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import dotenv from 'dotenv';
-import path from 'path';
+import path from 'node:path';
 
 // Load environment variables
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
@@ -76,7 +76,7 @@ const env = parseEnv();
 export const config = {
   // Server
   nodeEnv: env.NODE_ENV,
-  port: parseInt(env.PORT, 10),
+  port: Number.parseInt(env.PORT, 10),
   host: env.HOST,
   isDevelopment: env.NODE_ENV === 'development',
   isProduction: env.NODE_ENV === 'production',
@@ -85,14 +85,14 @@ export const config = {
   // Database
   database: {
     url: env.DATABASE_URL,
-    poolMin: parseInt(env.DATABASE_POOL_MIN, 10),
-    poolMax: parseInt(env.DATABASE_POOL_MAX, 10),
+    poolMin: Number.parseInt(env.DATABASE_POOL_MIN, 10),
+    poolMax: Number.parseInt(env.DATABASE_POOL_MAX, 10),
   },
   
   // Redis
   redis: {
     url: env.REDIS_URL,
-    ttlSeconds: parseInt(env.REDIS_TTL_SECONDS, 10),
+    ttlSeconds: Number.parseInt(env.REDIS_TTL_SECONDS, 10),
   },
   
   // Authentication
@@ -105,7 +105,7 @@ export const config = {
   // SERPAPI
   serpapi: {
     key: env.SERPAPI_KEY,
-    timeoutMs: parseInt(env.SERPAPI_TIMEOUT_MS, 10),
+    timeoutMs: Number.parseInt(env.SERPAPI_TIMEOUT_MS, 10),
   },
   
   // CORS
@@ -115,8 +115,8 @@ export const config = {
   
   // File Upload
   upload: {
-    maxFileSizeMB: parseInt(env.MAX_FILE_SIZE_MB, 10),
-    maxFileSizeBytes: parseInt(env.MAX_FILE_SIZE_MB, 10) * 1024 * 1024,
+    maxFileSizeMB: Number.parseInt(env.MAX_FILE_SIZE_MB, 10),
+    maxFileSizeBytes: Number.parseInt(env.MAX_FILE_SIZE_MB, 10) * 1024 * 1024,
     uploadDir: env.UPLOAD_DIR,
     allowedTypes: ['.xlsx', '.csv', '.xls'],
   },
@@ -131,7 +131,7 @@ export const config = {
   
   // Audit Trail
   audit: {
-    retentionDays: parseInt(env.AUDIT_LOG_RETENTION_DAYS, 10),
+    retentionDays: Number.parseInt(env.AUDIT_LOG_RETENTION_DAYS, 10),
     cleanupSchedule: env.AUDIT_CLEANUP_SCHEDULE,
   },
   

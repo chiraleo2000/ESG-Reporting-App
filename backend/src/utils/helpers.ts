@@ -79,21 +79,21 @@ export const convertUnits = {
  * Validate emission factor value
  */
 export const isValidEmissionFactor = (ef: number): boolean => {
-  return typeof ef === 'number' && ef >= 0 && ef < 1000000 && !isNaN(ef);
+  return typeof ef === 'number' && ef >= 0 && ef < 1000000 && !Number.isNaN(ef);
 };
 
 /**
  * Sanitize string for database
  */
 export const sanitizeString = (str: string): string => {
-  return str.trim().replace(/[<>]/g, '');
+  return str.trim().replaceAll(/[<>]/g, '');
 };
 
 /**
  * Generate file hash for integrity check
  */
 export const generateHash = async (buffer: Buffer): Promise<string> => {
-  const crypto = await import('crypto');
+  const crypto = await import('node:crypto');
   return crypto.createHash('sha256').update(buffer).digest('hex');
 };
 
@@ -121,7 +121,10 @@ export const chunkArray = <T>(array: T[], size: number): T[][] => {
 export const groupBy = <T>(array: T[], key: keyof T): Record<string, T[]> => {
   return array.reduce((result, item) => {
     const groupKey = String(item[key]);
-    (result[groupKey] = result[groupKey] || []).push(item);
+    if (!result[groupKey]) {
+      result[groupKey] = [];
+    }
+    result[groupKey].push(item);
     return result;
   }, {} as Record<string, T[]>);
 };
@@ -182,7 +185,7 @@ export const safeJsonParse = <T>(json: string, defaultValue: T): T => {
  * Deep clone object
  */
 export const deepClone = <T>(obj: T): T => {
-  return JSON.parse(JSON.stringify(obj));
+  return structuredClone(obj);
 };
 
 /**

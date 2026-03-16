@@ -1,12 +1,11 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
-import { redisClient as redis } from '../config/redis';
 import { config } from '../config/env';
 import { generateId, roundTo } from '../utils/helpers';
 import { BadRequestError, NotFoundError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import * as ghgService from '../services/ghgService';
-import type { AuditAction, CFPResult, CFOResult } from '../types';
+import type { AuditAction } from '../types';
 
 // Audit log helper
 async function logAudit(
@@ -33,7 +32,8 @@ async function logAudit(
  */
 export async function calculateActivity(req: Request, res: Response): Promise<void> {
   const { projectId, activityId } = req.params;
-  const userId = req.user!.id;
+  if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+  const userId = req.user.id;
   const { emissionFactorId, customEmissionFactor, tierLevel, includePrecursors } = req.body;
 
   // Get activity
@@ -63,7 +63,7 @@ export async function calculateActivity(req: Request, res: Response): Promise<vo
     if (efResult.rows.length === 0) {
       throw new NotFoundError('Emission factor not found');
     }
-    emissionFactor = parseFloat(efResult.rows[0].factor_value);
+    emissionFactor = Number.parseFloat(efResult.rows[0].factor_value);
     emissionFactorSource = efResult.rows[0].source;
   } else {
     // Use default emission factor lookup
@@ -125,7 +125,7 @@ export async function calculateActivity(req: Request, res: Response): Promise<vo
     success: true,
     data: {
       activityId,
-      quantity: parseFloat(activity.quantity),
+      quantity: Number.parseFloat(activity.quantity),
       unit: activity.unit,
       emissionFactor,
       emissionFactorSource,
@@ -141,7 +141,8 @@ export async function calculateActivity(req: Request, res: Response): Promise<vo
  */
 export async function calculateAllActivities(req: Request, res: Response): Promise<void> {
   const { projectId } = req.params;
-  const userId = req.user!.id;
+  if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+  const userId = req.user.id;
   const { includePrecursors = false } = req.body;
 
   // Get all pending activities
@@ -239,7 +240,8 @@ export async function calculateAllActivities(req: Request, res: Response): Promi
  */
 export async function calculateCFP(req: Request, res: Response): Promise<void> {
   const { projectId } = req.params;
-  const userId = req.user!.id;
+  if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+  const userId = req.user.id;
   const { productName, functionalUnit, productionVolume, allocationMethod, includeBiogenic } = req.body;
 
   // Get all calculated activities for the project
@@ -267,7 +269,7 @@ export async function calculateCFP(req: Request, res: Response): Promise<void> {
 
   // Map activities to lifecycle stages
   for (const activity of activities) {
-    const emissions = parseFloat(activity.total_emissions_kg_co2e) || 0;
+    const emissions = Number.parseFloat(activity.total_emissions_kg_co2e) || 0;
     
     // Scope 1 & 2 go to production
     if (activity.scope === 'scope1' || activity.scope === 'scope2') {
@@ -311,7 +313,7 @@ export async function calculateCFP(req: Request, res: Response): Promise<void> {
        FROM activities WHERE project_id = $1`,
       [projectId]
     );
-    biogenicCarbon = parseFloat(biogenicResult.rows[0]?.biogenic) || 0;
+    biogenicCarbon = Number.parseFloat(biogenicResult.rows[0]?.biogenic) || 0;
   }
 
   // Save CFP result
@@ -377,7 +379,8 @@ export async function calculateCFP(req: Request, res: Response): Promise<void> {
  */
 export async function calculateCFO(req: Request, res: Response): Promise<void> {
   const { projectId } = req.params;
-  const userId = req.user!.id;
+  if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+  const userId = req.user.id;
   const { organizationName, consolidationMethod, operationalBoundary, reportingYear } = req.body;
 
   // Get all calculated activities
@@ -404,7 +407,7 @@ export async function calculateCFO(req: Request, res: Response): Promise<void> {
   const scope3CategoryBreakdown: Record<string, number> = {};
 
   for (const activity of activitiesResult.rows) {
-    const emissions = parseFloat(activity.total_emissions_kg_co2e) || 0;
+    const emissions = Number.parseFloat(activity.total_emissions_kg_co2e) || 0;
 
     switch (activity.scope) {
       case 'scope1':
@@ -414,7 +417,7 @@ export async function calculateCFO(req: Request, res: Response): Promise<void> {
         // For simplicity, treat as location-based (would need separate tracking for market-based)
         scopeEmissions.scope2Location += emissions;
         break;
-      case 'scope3':
+      case 'scope3': {
         const category = activity.scope3_category || 'other';
         scope3CategoryBreakdown[category] = (scope3CategoryBreakdown[category] || 0) + emissions;
         
@@ -429,6 +432,7 @@ export async function calculateCFO(req: Request, res: Response): Promise<void> {
           scopeEmissions.scope3Downstream += emissions;
         }
         break;
+      }
     }
   }
 
@@ -518,18 +522,18 @@ export async function getCFPResults(req: Request, res: Response): Promise<void> 
       id: row.id,
       productName: row.product_name,
       functionalUnit: row.functional_unit,
-      productionVolume: parseFloat(row.production_volume),
+      productionVolume: Number.parseFloat(row.production_volume),
       allocationMethod: row.allocation_method,
       lifecycleStages: {
-        rawMaterials: parseFloat(row.raw_materials_emissions),
-        production: parseFloat(row.production_emissions),
-        distribution: parseFloat(row.distribution_emissions),
-        use: parseFloat(row.use_emissions),
-        endOfLife: parseFloat(row.end_of_life_emissions),
+        rawMaterials: Number.parseFloat(row.raw_materials_emissions),
+        production: Number.parseFloat(row.production_emissions),
+        distribution: Number.parseFloat(row.distribution_emissions),
+        use: Number.parseFloat(row.use_emissions),
+        endOfLife: Number.parseFloat(row.end_of_life_emissions),
       },
-      cfpTotal: parseFloat(row.cfp_total),
-      cfpPerUnit: parseFloat(row.cfp_per_unit),
-      biogenicCarbon: parseFloat(row.biogenic_carbon),
+      cfpTotal: Number.parseFloat(row.cfp_total),
+      cfpPerUnit: Number.parseFloat(row.cfp_per_unit),
+      biogenicCarbon: Number.parseFloat(row.biogenic_carbon),
       createdAt: row.created_at,
     })),
   });
@@ -555,18 +559,18 @@ export async function getCFOResults(req: Request, res: Response): Promise<void> 
       consolidationMethod: row.consolidation_method,
       operationalBoundary: row.operational_boundary,
       emissions: {
-        scope1: parseFloat(row.scope1_emissions),
+        scope1: Number.parseFloat(row.scope1_emissions),
         scope2: {
-          locationBased: parseFloat(row.scope2_location_emissions),
-          marketBased: parseFloat(row.scope2_market_emissions),
+          locationBased: Number.parseFloat(row.scope2_location_emissions),
+          marketBased: Number.parseFloat(row.scope2_market_emissions),
         },
         scope3: {
-          upstream: parseFloat(row.scope3_upstream_emissions),
-          downstream: parseFloat(row.scope3_downstream_emissions),
+          upstream: Number.parseFloat(row.scope3_upstream_emissions),
+          downstream: Number.parseFloat(row.scope3_downstream_emissions),
           categoryBreakdown: row.scope3_category_breakdown,
         },
       },
-      cfoTotal: parseFloat(row.cfo_total),
+      cfoTotal: Number.parseFloat(row.cfo_total),
       createdAt: row.created_at,
     })),
   });
@@ -603,8 +607,8 @@ export async function getProjectTotals(req: Request, res: Response): Promise<voi
   };
 
   for (const row of result.rows) {
-    const emissions = parseFloat(row.total_emissions) || 0;
-    const count = parseInt(row.activity_count) || 0;
+    const emissions = Number.parseFloat(row.total_emissions) || 0;
+    const count = Number.parseInt(row.activity_count) || 0;
     totals.activityCount += count;
 
     switch (row.scope) {
@@ -640,12 +644,12 @@ export async function getProjectTotals(req: Request, res: Response): Promise<voi
       scope2: roundTo(totals.scope2, 4),
       scope3: roundTo(totals.scope3, 4),
       scope3Categories: Object.fromEntries(
-        Object.entries(totals.scope3Categories).map(([k, v]) => [k, roundTo(v as number, 4)])
+        Object.entries(totals.scope3Categories).map(([k, v]) => [k, roundTo(v, 4)])
       ),
       total: roundTo(totals.total, 4),
       totalTonnesCO2e: roundTo(totals.total / 1000, 2),
       activityCount: totals.activityCount,
-      pendingActivities: parseInt(pendingResult.rows[0].pending) || 0,
+      pendingActivities: Number.parseInt(pendingResult.rows[0].pending) || 0,
     },
   });
 }
@@ -655,13 +659,13 @@ export async function getProjectTotals(req: Request, res: Response): Promise<voi
  */
 export async function calculateBoth(req: Request, res: Response): Promise<void> {
   const { projectId } = req.params;
-  const userId = req.user!.id;
+  if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+  const userId = req.user.id;
   const { 
     productName, 
     functionalUnit, 
     productionVolume, 
     allocationMethod, 
-    includeBiogenic,
     organizationName,
     consolidationMethod,
     operationalBoundary,
@@ -702,7 +706,7 @@ export async function calculateBoth(req: Request, res: Response): Promise<void> 
   const scope3CategoryBreakdown: Record<string, number> = {};
 
   for (const activity of activitiesResult.rows) {
-    const emissions = parseFloat(activity.total_emissions_kg_co2e) || 0;
+    const emissions = Number.parseFloat(activity.total_emissions_kg_co2e) || 0;
 
     // CFP mapping
     if (activity.scope === 'scope1' || activity.scope === 'scope2') {
@@ -739,7 +743,7 @@ export async function calculateBoth(req: Request, res: Response): Promise<void> 
       case 'scope2':
         scopeEmissions.scope2Location += emissions;
         break;
-      case 'scope3':
+      case 'scope3': {
         const category = activity.scope3_category || 'other';
         scope3CategoryBreakdown[category] = (scope3CategoryBreakdown[category] || 0) + emissions;
         const upstreamCategories = ['purchased_goods', 'capital_goods', 'fuel_energy', 'upstream_transport', 'waste', 'business_travel', 'employee_commuting', 'upstream_leased'];
@@ -749,6 +753,7 @@ export async function calculateBoth(req: Request, res: Response): Promise<void> 
           scopeEmissions.scope3Downstream += emissions;
         }
         break;
+      }
     }
   }
 
@@ -825,7 +830,6 @@ export async function calculateBoth(req: Request, res: Response): Promise<void> 
  * Calculate precursor emissions for CBAM
  */
 export async function calculatePrecursors(req: Request, res: Response): Promise<void> {
-  const userId = req.user!.id;
   const { materials, productionRoutes, quantities } = req.body;
 
   if (!Array.isArray(materials) || materials.length === 0) {
@@ -849,14 +853,14 @@ export async function calculatePrecursors(req: Request, res: Response): Promise<
     );
 
     let factor = 0;
-    let source = 'default';
+    let source: string;
 
     if (factorResult.rows.length > 0) {
-      factor = parseFloat(factorResult.rows[0].factor_kg_co2_per_kg);
+      factor = Number.parseFloat(factorResult.rows[0].factor_kg_co2_per_kg);
       source = factorResult.rows[0].source;
     } else {
       // Use default factor if not found
-      factor = 2.0; // Default kg CO2 per kg
+      factor = 2; // Default kg CO2 per kg
       source = 'default_estimate';
     }
 
@@ -909,7 +913,7 @@ export async function getHotSpots(req: Request, res: Response): Promise<void> {
     [projectId]
   );
 
-  const totalEmissions = parseFloat(totalResult.rows[0]?.total) || 0;
+  const totalEmissions = Number.parseFloat(totalResult.rows[0]?.total) || 0;
 
   // Get emissions by scope
   const scopeResult = await db.query(
@@ -938,9 +942,9 @@ export async function getHotSpots(req: Request, res: Response): Promise<void> {
     scope: row.scope,
     scope3Category: row.scope3_category,
     activityType: row.activity_type,
-    emissions: parseFloat(row.total_emissions_kg_co2e),
-    percentage: totalEmissions > 0 ? roundTo((parseFloat(row.total_emissions_kg_co2e) / totalEmissions) * 100, 2) : 0,
-    quantity: parseFloat(row.quantity),
+    emissions: Number.parseFloat(row.total_emissions_kg_co2e),
+    percentage: totalEmissions > 0 ? roundTo((Number.parseFloat(row.total_emissions_kg_co2e) / totalEmissions) * 100, 2) : 0,
+    quantity: Number.parseFloat(row.quantity),
     unit: row.unit,
   }));
 
@@ -950,13 +954,13 @@ export async function getHotSpots(req: Request, res: Response): Promise<void> {
       hotSpots,
       byScope: scopeResult.rows.map((row) => ({
         scope: row.scope,
-        emissions: parseFloat(row.total),
-        percentage: totalEmissions > 0 ? roundTo((parseFloat(row.total) / totalEmissions) * 100, 2) : 0,
+        emissions: Number.parseFloat(row.total),
+        percentage: totalEmissions > 0 ? roundTo((Number.parseFloat(row.total) / totalEmissions) * 100, 2) : 0,
       })),
       byActivityType: activityTypeResult.rows.map((row) => ({
         activityType: row.activity_type,
-        emissions: parseFloat(row.total),
-        percentage: totalEmissions > 0 ? roundTo((parseFloat(row.total) / totalEmissions) * 100, 2) : 0,
+        emissions: Number.parseFloat(row.total),
+        percentage: totalEmissions > 0 ? roundTo((Number.parseFloat(row.total) / totalEmissions) * 100, 2) : 0,
       })),
       totalEmissions: roundTo(totalEmissions, 4),
     },
@@ -986,7 +990,7 @@ export async function getDataQuality(req: Request, res: Response): Promise<void>
 
   // Calculate overall quality score
   const qualityScores: Record<string, number> = {
-    high: 1.0,
+    high: 1,
     medium: 0.7,
     low: 0.4,
     unknown: 0.3,
@@ -1004,8 +1008,8 @@ export async function getDataQuality(req: Request, res: Response): Promise<void>
 
   for (const row of result.rows) {
     const quality = row.data_quality_score || 'unknown';
-    const emissions = parseFloat(row.total_emissions) || 0;
-    const count = parseInt(row.count);
+    const emissions = Number.parseFloat(row.total_emissions) || 0;
+    const count = Number.parseInt(row.count);
 
     totalWeightedScore += (qualityScores[quality] || 0.3) * emissions;
     totalEmissions += emissions;
@@ -1096,8 +1100,8 @@ export async function compareYears(req: Request, res: Response): Promise<void> {
   }
 
   const project = projectResult.rows[0];
-  const baseline = parseInt(baselineYear as string) || project.baseline_year;
-  const reporting = parseInt(reportingYear as string) || project.reporting_year;
+  const baseline = Number.parseInt(String(baselineYear)) || project.baseline_year;
+  const reporting = Number.parseInt(String(reportingYear)) || project.reporting_year;
 
   // Get CFO results for both years
   const cfoResults = await db.query(
@@ -1114,8 +1118,8 @@ export async function compareYears(req: Request, res: Response): Promise<void> {
     throw new BadRequestError('CFO results not found for both baseline and reporting years');
   }
 
-  const baselineTotal = parseFloat(baselineCFO.cfo_total);
-  const reportingTotal = parseFloat(reportingCFO.cfo_total);
+  const baselineTotal = Number.parseFloat(baselineCFO.cfo_total);
+  const reportingTotal = Number.parseFloat(reportingCFO.cfo_total);
   const absoluteChange = reportingTotal - baselineTotal;
   const percentageChange = baselineTotal > 0 ? (absoluteChange / baselineTotal) * 100 : 0;
 
@@ -1126,20 +1130,22 @@ export async function compareYears(req: Request, res: Response): Promise<void> {
       reportingYear: reporting,
       baseline: {
         total: baselineTotal,
-        scope1: parseFloat(baselineCFO.scope1_emissions),
-        scope2: parseFloat(baselineCFO.scope2_location_emissions),
-        scope3: parseFloat(baselineCFO.scope3_upstream_emissions) + parseFloat(baselineCFO.scope3_downstream_emissions),
+        scope1: Number.parseFloat(baselineCFO.scope1_emissions),
+        scope2: Number.parseFloat(baselineCFO.scope2_location_emissions),
+        scope3: Number.parseFloat(baselineCFO.scope3_upstream_emissions) + Number.parseFloat(baselineCFO.scope3_downstream_emissions),
       },
       reporting: {
         total: reportingTotal,
-        scope1: parseFloat(reportingCFO.scope1_emissions),
-        scope2: parseFloat(reportingCFO.scope2_location_emissions),
-        scope3: parseFloat(reportingCFO.scope3_upstream_emissions) + parseFloat(reportingCFO.scope3_downstream_emissions),
+        scope1: Number.parseFloat(reportingCFO.scope1_emissions),
+        scope2: Number.parseFloat(reportingCFO.scope2_location_emissions),
+        scope3: Number.parseFloat(reportingCFO.scope3_upstream_emissions) + Number.parseFloat(reportingCFO.scope3_downstream_emissions),
       },
       comparison: {
         absoluteChange: roundTo(absoluteChange, 4),
         percentageChange: roundTo(percentageChange, 2),
-        direction: absoluteChange > 0 ? 'increase' : absoluteChange < 0 ? 'decrease' : 'unchanged',
+        direction: absoluteChange > 0
+          ? 'increase'
+          : (absoluteChange < 0 ? 'decrease' : 'unchanged'),
       },
     },
   });

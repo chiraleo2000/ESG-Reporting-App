@@ -6,9 +6,11 @@ import { test, expect, Page } from '@playwright/test';
  */
 
 // Test data - static user for reliable testing
+const TEST_USER_INPUT = process.env.E2E_TEST_PASSWORD || 'SecureTest@123!';
+
 const testUser = {
   email: 'e2e_test_user@example.com',
-  password: 'SecureTest@123!',
+  pass: TEST_USER_INPUT,
   name: 'E2E Test User',
   organization: 'Test Organization',
 };
@@ -16,7 +18,7 @@ const testUser = {
 // Dynamic user for registration tests
 const dynamicTestUser = {
   email: `e2e_playwright_${Date.now()}@test.com`,
-  password: 'SecureTest@123!',
+  pass: TEST_USER_INPUT,
   name: 'E2E Playwright User',
   organization: 'Test Organization',
 };
@@ -87,7 +89,7 @@ test.describe('ESG Reporting App - Authentication Flow', () => {
     }
     
     await page.fill('input[name="email"], input[type="email"]', dynamicTestUser.email);
-    await page.fill('input[name="password"], input[type="password"]', dynamicTestUser.password);
+    await page.fill('input[name="password"], input[type="password"]', dynamicTestUser.pass);
     
     // Submit form
     await page.click('button[type="submit"]');
@@ -108,7 +110,7 @@ test.describe('ESG Reporting App - Authentication Flow', () => {
     
     // Fill login form
     await page.fill('input[type="email"]', dynamicTestUser.email);
-    await page.fill('input[type="password"]', dynamicTestUser.password);
+    await page.fill('input[type="password"]', dynamicTestUser.pass);
     
     // Submit
     await page.click('button[type="submit"]');
@@ -149,7 +151,7 @@ test.describe('ESG Reporting App - Dashboard', () => {
     const email = `dashboard_test_${Date.now()}@test.com`;
     await page.fill('input[name="name"]', 'Dashboard Test User');
     await page.fill('input[type="email"]', email);
-    await page.fill('input[type="password"]', 'SecureTest@123!');
+    await page.fill('input[type="password"]', TEST_USER_INPUT);
     await page.click('button[type="submit"]');
     await page.waitForTimeout(3000);
     
@@ -197,7 +199,7 @@ test.describe('ESG Reporting App - Projects', () => {
     const email = `project_test_${Date.now()}@test.com`;
     await page.fill('input[name="name"]', 'Project Test User');
     await page.fill('input[type="email"]', email);
-    await page.fill('input[type="password"]', 'SecureTest@123!');
+    await page.fill('input[type="password"]', TEST_USER_INPUT);
     await page.click('button[type="submit"]');
     await page.waitForTimeout(2000);
     
@@ -242,7 +244,7 @@ test.describe('ESG Reporting App - Activities', () => {
     const email = `activities_test_${Date.now()}@test.com`;
     await page.fill('input[name="name"]', 'Activities Test User');
     await page.fill('input[type="email"]', email);
-    await page.fill('input[type="password"]', 'SecureTest@123!');
+    await page.fill('input[type="password"]', TEST_USER_INPUT);
     await page.click('button[type="submit"]');
     await page.waitForTimeout(2000);
     
@@ -274,7 +276,7 @@ test.describe('ESG Reporting App - Reports', () => {
     const email = `reports_test_${Date.now()}@test.com`;
     await page.fill('input[name="name"]', 'Reports Test User');
     await page.fill('input[type="email"]', email);
-    await page.fill('input[type="password"]', 'SecureTest@123!');
+    await page.fill('input[type="password"]', TEST_USER_INPUT);
     await page.click('button[type="submit"]');
     await page.waitForTimeout(2000);
     
@@ -306,7 +308,7 @@ test.describe('ESG Reporting App - Analytics', () => {
     const email = `analytics_test_${Date.now()}@test.com`;
     await page.fill('input[name="name"]', 'Analytics Test User');
     await page.fill('input[type="email"]', email);
-    await page.fill('input[type="password"]', 'SecureTest@123!');
+    await page.fill('input[type="password"]', TEST_USER_INPUT);
     await page.click('button[type="submit"]');
     await page.waitForTimeout(2000);
     
@@ -338,7 +340,7 @@ test.describe('ESG Reporting App - Settings', () => {
     const email = `settings_test_${Date.now()}@test.com`;
     await page.fill('input[name="name"]', 'Settings Test User');
     await page.fill('input[type="email"]', email);
-    await page.fill('input[type="password"]', 'SecureTest@123!');
+    await page.fill('input[type="password"]', TEST_USER_INPUT);
     await page.click('button[type="submit"]');
     await page.waitForTimeout(2000);
     

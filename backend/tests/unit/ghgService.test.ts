@@ -118,7 +118,7 @@ describe('GHG Service Calculations', () => {
 
       if (from === to) return value;
       
-      if (conversions[from] && conversions[from][to]) {
+      if (conversions[from]?.[to]) {
         return value * conversions[from][to];
       }
       
@@ -238,16 +238,16 @@ describe('GHG Service Calculations', () => {
   describe('Tier Level Calculations', () => {
     const getTierMultiplier = (tier: string): number => {
       const multipliers: Record<string, number> = {
-        tier1: 1.0,
+        tier1: 1,
         tier2: 1.1,
         tier3: 1.2,
         'tier2+': 1.15,
       };
-      return multipliers[tier] || 1.0;
+      return multipliers[tier] || 1;
     };
 
     it('should return correct multiplier for tier1', () => {
-      expect(getTierMultiplier('tier1')).toBe(1.0);
+      expect(getTierMultiplier('tier1')).toBe(1);
     });
 
     it('should return correct multiplier for tier2', () => {
@@ -263,7 +263,7 @@ describe('GHG Service Calculations', () => {
     });
 
     it('should default to 1.0 for unknown tier', () => {
-      expect(getTierMultiplier('unknown')).toBe(1.0);
+      expect(getTierMultiplier('unknown')).toBe(1);
     });
   });
 });

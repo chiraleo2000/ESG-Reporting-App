@@ -106,7 +106,7 @@ describe('GHG Service — Exported Functions', () => {
 
       const result = await lookupEmissionFactor('unknown_activity', 'unknown_unit', 'scope1');
 
-      expect(result).toEqual({ factor: 1.0, source: 'estimate' });
+      expect(result).toEqual({ factor: 1, source: 'estimate' });
       expect(logger.warn).toHaveBeenCalled();
     });
 
@@ -341,7 +341,7 @@ describe('GHG Service — Exported Functions', () => {
     });
 
     it('should use residual mix for uncovered electricity', async () => {
-      const instruments = [{ type: 'rec' as const, quantityKwh: 500, emissionFactor: 0.0 }];
+      const instruments = [{ type: 'rec' as const, quantityKwh: 500, emissionFactor: 0 }];
       const result = await calculateScope2MarketBased(1000, instruments);
       expect(result).toEqual({ emissions: 210, source: 'market_based' });
     });
@@ -349,10 +349,10 @@ describe('GHG Service — Exported Functions', () => {
     it('should handle multiple instruments', async () => {
       const instruments = [
         { type: 'ppa' as const, quantityKwh: 300, emissionFactor: 0.02 },
-        { type: 'rec' as const, quantityKwh: 400, emissionFactor: 0.0 },
+        { type: 'rec' as const, quantityKwh: 400, emissionFactor: 0 },
       ];
       const result = await calculateScope2MarketBased(1000, instruments);
-      // 300*0.02 + 400*0.0 + 300*0.42 = 6 + 0 + 126 = 132
+      // 300*0.02 + 400*0 + 300*0.42 = 6 + 0 + 126 = 132
       expect(result).toEqual({ emissions: 132, source: 'market_based' });
     });
 
@@ -416,13 +416,13 @@ describe('GHG Service — Exported Functions', () => {
     it('should return default factors for hydrogen', async () => {
       (mockDb.query as jest.Mock).mockResolvedValue({ rows: [], rowCount: 0 });
       const result = await getCBAMEmissionFactors('hydrogen', 'JP');
-      expect(result.directEmissions).toBe(9.0);
+      expect(result.directEmissions).toBe(9);
     });
 
     it('should return generic defaults for unknown category', async () => {
       (mockDb.query as jest.Mock).mockResolvedValue({ rows: [], rowCount: 0 });
       const result = await getCBAMEmissionFactors('unknown_goods', 'XX');
-      expect(result.directEmissions).toBe(1.0);
+      expect(result.directEmissions).toBe(1);
       expect(result.source).toBe('cbam_default');
     });
   });

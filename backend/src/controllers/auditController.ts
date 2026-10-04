@@ -10,7 +10,7 @@ import * as XLSX from 'xlsx';
  * Get audit logs for a project
  */
 export async function getProjectAuditLogs(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const { 
     page = 1, 
     limit = 50, 
@@ -103,7 +103,7 @@ export async function getProjectAuditLogs(req: Request, res: Response): Promise<
  * Get audit log summary for a project
  */
 export async function getAuditSummary(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const { days = 30 } = req.query;
 
   const startDate = new Date();
@@ -191,7 +191,7 @@ export async function getAuditSummary(req: Request, res: Response): Promise<void
  * Export audit logs
  */
 export async function exportAuditLogs(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const { format = 'xlsx', startDate, endDate } = req.query;
 
   let whereClause = 'WHERE project_id = $1';
@@ -297,7 +297,7 @@ export async function exportAuditLogs(req: Request, res: Response): Promise<void
  * Get audit log by ID
  */
 export async function getAuditLog(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT al.*, u.name as user_name, u.email as user_email
@@ -370,7 +370,7 @@ export async function getAuditRetentionInfo(req: Request, res: Response): Promis
  * Filter audit logs by action type for a specific project
  */
 export async function filterAuditLogs(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const { action, entityType, startDate, endDate, page = 1, limit = 50 } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 

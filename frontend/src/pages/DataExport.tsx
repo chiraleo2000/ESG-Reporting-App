@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/lib/motion';
 import {
   Download,
   FileSpreadsheet,
@@ -20,7 +20,7 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Select, Checkbox } from '@/components/ui/Input';
-import { projectsApi, reportsApi } from '@/lib/api';
+import { activitiesApi, projectsApi, reportsApi } from '@/lib/api';
 
 const container = {
   hidden: { opacity: 0 },
@@ -161,21 +161,52 @@ export const DataExport: React.FC = () => {
     setExportResult(null);
     try {
       // For report type, attempt real download
-      if (selectedTypes.includes('reports') && selectedProject !== 'all') {
-        const res = await reportsApi.getAll();
-        const reports = res?.data || res || [];
-        if (reports.length > 0) {
-          const report = reports[0];
-          await reportsApi.download(report.id, selectedFormat);
-          setExportResult(`✅ Export initiated for ${selectedTypes.length} data type(s)`);
-        }
-      } else {
-        // Simulate export for other types
-        await new Promise(r => setTimeout(r, 1500));
-        setExportResult(`✅ Export queued: ${selectedTypes.join(', ')} in .${selectedFormat} format`);
+      if (selectedProject === 'all') {
+        setExportResult('Choose one project before exporting.');
+        return;
       }
+      if (selectedTypes.includes('reports')) {
+        const res = await reportsApi.getByProject(selectedProject);
+        const data = res.data as { reports?: Array<{ id: string }> } | Array<{ id: string }> | undefined;
+        const reports = Array.isArray(data) ? data : data?.reports || [];
+        if (!res.success || reports.length === 0) {
+          setExportResult(res.error || 'This project has no report to download.');
+          return;
+        }
+        const download = await reportsApi.download(reports[0].id, selectedFormat === 'pdf' ? 'pdf' : selectedFormat);
+        if (!download.ok) {
+          setExportResult('Report download failed.');
+          return;
+        }
+        const blob = await download.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `report-${reports[0].id}.${selectedFormat}`;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+      if (selectedTypes.includes('activities')) {
+        const download = await activitiesApi.export(selectedProject, selectedFormat === 'xlsx' ? 'xlsx' : 'csv');
+        if (!download.ok) {
+          setExportResult('Activity export failed.');
+          return;
+        }
+        const blob = await download.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `activities.${selectedFormat === 'xlsx' ? 'xlsx' : 'csv'}`;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+      if (!selectedTypes.includes('reports') && !selectedTypes.includes('activities')) {
+        setExportResult('Choose activities or reports. Other export types are not available.');
+        return;
+      }
+      setExportResult('Download started.');
     } catch (err) {
-      setExportResult(`✅ Export queued: ${selectedTypes.join(', ')} in .${selectedFormat} format`);
+      setExportResult(err instanceof Error ? err.message : 'Export failed.');
     } finally {
       setExporting(false);
     }

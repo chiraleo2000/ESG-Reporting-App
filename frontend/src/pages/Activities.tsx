@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/lib/motion';
 import {
   Plus,
   Search,
@@ -47,7 +47,8 @@ import {
   TableEmpty,
 } from '@/components/ui/Table';
 import { Tabs, TabsList, TabsTrigger, TabsContent, TabWithBadge } from '@/components/ui/Tabs';
-import { activitiesApi, projectsApi, calculationsApi } from '@/lib/api';
+import { activitiesApi, filesApi, projectsApi, calculationsApi } from '@/lib/api';
+import { useAppStore } from '@/store/appStore';
 import { useAuthStore } from '@/store/authStore';
 
 // Activity categories with icons
@@ -144,6 +145,9 @@ export const Activities: React.FC = () => {
   const [selectedActivities, setSelectedActivities] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState('all');
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const currentProject = useAppStore((state) => state.currentProject);
   const [saving, setSaving] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
 
@@ -1128,9 +1132,37 @@ export const Activities: React.FC = () => {
           <Button variant="outline" onClick={() => setShowUploadModal(false)}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={uploadedFiles.length === 0}>
+          {importMessage && <p className="px-1 text-sm text-earth-600">{importMessage}</p>}
+          <Button
+            variant="primary"
+            disabled={uploadedFiles.length === 0 || importing || !currentProject}
+            onClick={async () => {
+              if (!currentProject || uploadedFiles.length === 0) {
+                setImportMessage('Select a project and a file first.');
+                return;
+              }
+              setImporting(true);
+              setImportMessage(null);
+              const uploaded = await filesApi.upload(uploadedFiles[0], currentProject.id);
+              if (!uploaded?.success || !uploaded.data?.id) {
+                setImportMessage(uploaded?.error || uploaded?.message || 'Upload failed');
+                setImporting(false);
+                return;
+              }
+              const imported = await filesApi.importAsActivities(uploaded.data.id, currentProject.id, {
+                Name: 'Name',
+                Scope: 'Scope',
+                'Activity Type': 'Activity Type',
+                Quantity: 'Quantity',
+                Unit: 'Unit',
+              });
+              setImportMessage(imported.success ? `Imported ${(imported.data as { imported?: number })?.imported ?? 0} activities.` : (imported.error || 'Import failed'));
+              setImporting(false);
+              if (imported.success) setShowUploadModal(false);
+            }}
+          >
             <Upload className="w-4 h-4" />
-            Import Data
+            {importing ? 'Importing…' : 'Import Data'}
           </Button>
         </ModalFooter>
       </Modal>

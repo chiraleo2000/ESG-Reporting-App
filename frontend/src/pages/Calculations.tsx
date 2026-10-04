@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
+import { motion } from '@/lib/motion';
 import {
   Calculator,
   Zap,
@@ -87,7 +88,10 @@ const initialCustomFactors = [
 ];
 
 export const Calculations: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'calculator' | 'batch' | 'history'>('calculator');
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState<'calculator' | 'batch' | 'history'>(
+    location.pathname.includes('/history') ? 'history' : 'calculator'
+  );
   const [selectedMethod, setSelectedMethod] = useState<string>('scope2_location');
   const [customFactors, setCustomFactors] = useState(initialCustomFactors);
   const [showFormulaDetails, setShowFormulaDetails] = useState(true);
@@ -159,24 +163,25 @@ export const Calculations: React.FC = () => {
         for (const proj of safeProjects.slice(0, 5)) {
           try {
             const histRes = await calculationsApi.getHistory(proj.id);
-            const history = histRes.data?.history || histRes.data || [];
-            if (Array.isArray(history)) {
-              history.forEach((h: any) => {
-                historyEntries.push({
-                  id: h.id || String(Math.random()),
-                  name: h.name || h.activity_name || `Calculation`,
-                  project: proj.name,
-                  method: h.method || h.calculation_method || 'scope2_location',
-                  inputs: h.inputs || h.input_data || {},
-                  result: Number(h.result || h.total_emissions || 0),
-                  resultUnit: h.resultUnit || 'kgCO2e',
-                  status: h.status || 'completed',
-                  calculatedAt: h.calculatedAt || h.calculated_at || h.created_at || new Date().toISOString(),
-                  calculatedBy: h.calculatedBy || h.calculated_by || 'System',
-                  notes: h.notes || '',
-                });
+            const history = histRes.data || {};
+            const pushEntry = (h: any, method: string, name: string, result: number) => {
+              historyEntries.push({
+                id: h.id || `${method}-${historyEntries.length}`,
+                name,
+                project: proj.name,
+                method,
+                inputs: {},
+                result,
+                resultUnit: 'tCO2e',
+                status: 'completed',
+                calculatedAt: h.createdAt || h.created_at || new Date().toISOString(),
+                calculatedBy: 'System',
+                notes: '',
               });
-            }
+            };
+            (history.cfpHistory || []).forEach((h: any) => pushEntry(h, 'CFP', h.productName || 'Product footprint', Number(h.cfpTotal || 0)));
+            (history.cfoHistory || []).forEach((h: any) => pushEntry(h, 'CFO', h.organizationName || 'Organization footprint', Number(h.cfoTotal || 0)));
+            (history.auditHistory || []).forEach((h: any) => pushEntry(h, h.action || 'CALCULATE', h.action || 'Calculation', 0));
           } catch { /* no history for this project */ }
         }
         if (historyEntries.length > 0) {
@@ -193,6 +198,11 @@ export const Calculations: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (location.pathname.includes('/history')) setActiveTab('history');
+    else if (location.pathname.includes('/batch')) setActiveTab('batch');
+  }, [location.pathname]);
 
   const currentMethod = calculationMethods[selectedMethod as keyof typeof calculationMethods];
 

@@ -71,6 +71,7 @@ interface AppState {
   // Auth
   user: User | null;
   token: string | null;
+  refreshToken: string | null;
   isAuthenticated: boolean;
   
   // Projects
@@ -94,6 +95,7 @@ interface AppState {
   // Actions - Auth
   setUser: (user: User | null) => void;
   setToken: (token: string | null) => void;
+  setRefreshToken: (refreshToken: string | null) => void;
   logout: () => void;
   
   // Actions - Projects
@@ -129,6 +131,7 @@ export const useAppStore = create<AppState>()(
       // Initial State
       user: null,
       token: null,
+      refreshToken: null,
       isAuthenticated: false,
       projects: [],
       currentProject: null,
@@ -143,10 +146,13 @@ export const useAppStore = create<AppState>()(
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       
       setToken: (token) => set({ token }),
+
+      setRefreshToken: (refreshToken) => set({ refreshToken }),
       
       logout: () => set({ 
         user: null, 
         token: null,
+        refreshToken: null,
         isAuthenticated: false,
         currentProject: null,
         activities: [],
@@ -217,6 +223,7 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         user: state.user,
         token: state.token,
+        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
         currentProject: state.currentProject,
       }),

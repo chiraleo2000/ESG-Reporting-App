@@ -29,7 +29,7 @@ async function logAudit(
  * Create a new ESG goal
  */
 export async function createGoal(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const userId = (req.user as { id: string }).id;
   const {
     name,
@@ -122,7 +122,7 @@ export async function createGoal(req: Request, res: Response): Promise<void> {
  * Get all ESG goals for a project
  */
 export async function getGoals(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const { page = 1, limit = 50, status, category, scope } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 
@@ -184,7 +184,7 @@ export async function getGoals(req: Request, res: Response): Promise<void> {
  * Get a single ESG goal
  */
 export async function getGoal(req: Request, res: Response): Promise<void> {
-  const { projectId, goalId } = req.params;
+  const { projectId, goalId } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT g.*, u.name as assigned_to_name, c.name as created_by_name
@@ -209,7 +209,7 @@ export async function getGoal(req: Request, res: Response): Promise<void> {
  * Update an ESG goal
  */
 export async function updateGoal(req: Request, res: Response): Promise<void> {
-  const { projectId, goalId } = req.params;
+  const { projectId, goalId } = (req.params as Record<string, string>);
   const userId = (req.user as { id: string }).id;
   const updates = req.body;
 
@@ -314,7 +314,7 @@ export async function updateGoal(req: Request, res: Response): Promise<void> {
  * Delete an ESG goal
  */
 export async function deleteGoal(req: Request, res: Response): Promise<void> {
-  const { projectId, goalId } = req.params;
+  const { projectId, goalId } = (req.params as Record<string, string>);
   const userId = (req.user as { id: string }).id;
 
   const result = await db.query(
@@ -338,7 +338,7 @@ export async function deleteGoal(req: Request, res: Response): Promise<void> {
  * Update goal progress (recalculate from actual emissions)
  */
 export async function updateGoalProgress(req: Request, res: Response): Promise<void> {
-  const { projectId, goalId } = req.params;
+  const { projectId, goalId } = (req.params as Record<string, string>);
   const userId = (req.user as { id: string }).id;
 
   // Get goal details
@@ -442,7 +442,7 @@ export async function updateGoalProgress(req: Request, res: Response): Promise<v
  * Get ESG goals summary for a project
  */
 export async function getGoalsSummary(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
 
   // Get summary by status
   const statusSummary = await db.query(
@@ -555,7 +555,7 @@ export async function getGoalsSummary(req: Request, res: Response): Promise<void
  * Bulk update goal progress for all goals in a project
  */
 export async function bulkUpdateProgress(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const userId = (req.user as { id: string }).id;
 
   // Get all active goals

@@ -40,6 +40,7 @@ jest.mock('../../src/utils/helpers', () => ({
 jest.mock('../../src/middleware/auth', () => ({
   generateToken: jest.fn().mockReturnValue('mock-jwt-token'),
   generateTokens: jest.fn().mockReturnValue({ accessToken: 'new-access-token', refreshToken: 'new-refresh-token' }),
+  verifyRefreshToken: jest.fn().mockReturnValue({ userId: 'user-123' }),
   hashPassword: jest.fn().mockResolvedValue('hashed-password'),
   comparePassword: jest.fn(),
 }));
@@ -89,7 +90,8 @@ describe('Auth Controller', () => {
         success: true,
         data: expect.objectContaining({
           user: expect.objectContaining({ email: 'new@example.com', name: 'New User' }),
-          token: 'mock-jwt-token',
+          token: 'new-access-token',
+          refreshToken: 'new-refresh-token',
         }),
       });
     });
@@ -142,7 +144,8 @@ describe('Auth Controller', () => {
         success: true,
         data: expect.objectContaining({
           user: expect.objectContaining({ email: 'admin@esgdemo.com', role: 'owner' }),
-          token: 'mock-jwt-token',
+          token: 'new-access-token',
+          refreshToken: 'new-refresh-token',
         }),
       });
     });
@@ -347,12 +350,29 @@ describe('Auth Controller', () => {
   // ===================== REFRESH TOKEN =====================
   describe('refreshToken', () => {
     it('should return new access token', async () => {
+      mockRequest.body = { refreshToken: 'valid-refresh' };
+      (mockDb.query as jest.Mock).mockResolvedValueOnce({
+        rows: [{ id: 'user-123', email: 'test@example.com', name: 'Test', organization: 'Corp', role: 'owner' }],
+        rowCount: 1,
+      });
+
       await refreshToken(mockRequest as Request, mockResponse as Response);
 
       expect(mockResponse.json).toHaveBeenCalledWith({
         success: true,
-        data: { token: 'new-access-token' },
+        data: { token: 'new-access-token', refreshToken: 'new-refresh-token' },
       });
+    });
+
+    it('should reject a bad refresh token', async () => {
+      const { verifyRefreshToken } = jest.requireMock('../../src/middleware/auth');
+      verifyRefreshToken.mockImplementationOnce(() => {
+        throw new Error('bad');
+      });
+      mockRequest.body = { refreshToken: 'nope' };
+
+      await expect(refreshToken(mockRequest as Request, mockResponse as Response))
+        .rejects.toThrow('Invalid refresh token');
     });
   });
 

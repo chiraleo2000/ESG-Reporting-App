@@ -10,6 +10,9 @@ import routes from './routes';
 // Create Express application
 const app: Application = express();
 
+// Keep nested query filters (Express 5 defaults to the simple parser).
+app.set('query parser', 'extended');
+
 // Security middleware
 app.use(helmet());
 

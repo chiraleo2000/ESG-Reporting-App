@@ -1,6 +1,9 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../../tailwind.config.js";
+
+.motion-fade {
+  transition: opacity 180ms ease-out, transform 180ms ease-out;
+}
 
 /* Base Styles */
 @layer base {
@@ -64,7 +67,8 @@
   }
 
   .card-grass {
-    @apply card bg-gradient-to-br from-blue-50 to-white 
+    @apply bg-white rounded-2xl shadow-card border transition-all duration-300
+           hover:shadow-card-hover bg-gradient-to-br from-blue-50 to-white
            border-blue-200 hover:border-blue-300;
   }
 
@@ -77,22 +81,38 @@
   }
 
   .btn-primary {
-    @apply btn bg-[#0078D4] text-white hover:bg-[#106EBE] 
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5
+           rounded-xl font-medium text-sm transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed
+           bg-[#0078D4] text-white hover:bg-[#106EBE]
            focus:ring-[#0078D4] shadow-lg active:scale-95;
   }
 
   .btn-secondary {
-    @apply btn bg-blue-100 text-blue-700 hover:bg-blue-200 
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5
+           rounded-xl font-medium text-sm transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed
+           bg-blue-100 text-blue-700 hover:bg-blue-200
            focus:ring-blue-400;
   }
 
   .btn-outline {
-    @apply btn border-2 border-blue-500 text-blue-600 
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5
+           rounded-xl font-medium text-sm transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed
+           border-2 border-blue-500 text-blue-600
            hover:bg-blue-50 focus:ring-blue-400;
   }
 
   .btn-ghost {
-    @apply btn text-earth-600 hover:bg-earth-100 
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5
+           rounded-xl font-medium text-sm transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed
+           text-earth-600 hover:bg-earth-100
            hover:text-earth-800 focus:ring-earth-400;
   }
 
@@ -119,13 +139,19 @@
   }
 
   .input-grass {
-    @apply input border-blue-200 focus:ring-blue-400 
+    @apply w-full px-4 py-3 rounded-xl border bg-white text-earth-800 placeholder-earth-400
+           focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200
+           border-blue-200 focus:ring-blue-400
            bg-blue-50/50 focus:bg-white;
   }
 
   /* Select */
   .select {
-    @apply input appearance-none cursor-pointer 
+    @apply w-full px-4 py-3 rounded-xl border border-earth-200
+           bg-white text-earth-800 placeholder-earth-400
+           focus:outline-none focus:ring-2 focus:ring-[#0078D4]
+           focus:border-transparent transition-all duration-200
+           appearance-none cursor-pointer 
            bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2024%2024%22%20stroke%3D%22%2378716c%22%3E%3Cpath%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%222%22%20d%3D%22M19%209l-7%207-7-7%22%2F%3E%3C%2Fsvg%3E')]
            bg-[length:20px] bg-[right_12px_center] bg-no-repeat pr-10;
   }
@@ -146,23 +172,23 @@
   }
 
   .badge-grass {
-    @apply badge bg-blue-100 text-blue-700;
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700;
   }
 
   .badge-success {
-    @apply badge bg-success-50 text-success-600;
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-success-50 text-success-600;
   }
 
   .badge-warning {
-    @apply badge bg-warning-50 text-warning-600;
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-warning-50 text-warning-600;
   }
 
   .badge-error {
-    @apply badge bg-error-50 text-error-600;
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-error-50 text-error-600;
   }
 
   .badge-info {
-    @apply badge bg-info-50 text-info-600;
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-info-50 text-info-600;
   }
 
   /* Sidebar Navigation */
@@ -216,7 +242,8 @@
 
   /* Stat Cards */
   .stat-card {
-    @apply card p-6 flex flex-col gap-2;
+    @apply bg-white rounded-2xl shadow-card border border-earth-200
+           transition-all duration-300 hover:shadow-card-hover p-6 flex flex-col gap-2;
   }
 
   .stat-value {

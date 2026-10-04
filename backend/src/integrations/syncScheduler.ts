@@ -183,6 +183,31 @@ export async function executeSyncJob(id: string): Promise<ConnectorResult> {
 /**
  * Stop a scheduled sync
  */
+/**
+ * Keep a job in memory so it can run once, without starting a cron timer.
+ */
+export function stageSync(
+  id: string,
+  name: string,
+  projectId: string,
+  connectorType: ConnectorType,
+  config: Record<string, any>,
+  mapping: Record<string, string>
+): void {
+  stopSync(id);
+  scheduledSyncs.set(id, {
+    id,
+    name,
+    projectId,
+    connectorType,
+    config,
+    mapping,
+    cronExpression: '',
+    task: null,
+    enabled: false,
+  });
+}
+
 export function stopSync(id: string): void {
   const sync = scheduledSyncs.get(id);
   if (sync?.task) {
@@ -254,6 +279,7 @@ async function importActivityRecord(projectId: string, record: any): Promise<voi
 
 export class SyncScheduler {
   static readonly schedule = scheduleSync;
+  static readonly stage = stageSync;
   static readonly execute = executeSyncJob;
   static readonly stop = stopSync;
   static readonly stopAll = stopAllSyncs;

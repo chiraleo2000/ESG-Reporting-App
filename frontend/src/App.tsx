@@ -1,26 +1,27 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
-import { 
-  Dashboard, 
-  Projects, 
-  Activities, 
-  Reports, 
-  Settings, 
-  Login,
-  EmissionFactors,
-  Signatures,
-  AuditLog,
-  DataImport,
-  DataExport,
-  AIAssistant,
-  Analytics,
-  Calculations,
-  ESGGoals
-} from '@/pages';
+import { Login } from '@/pages/Login';
 import { ToastProvider } from '@/components/ui/Toast';
 import { useThemeStore } from '@/store/themeStore';
 import { useAppStore } from '@/store/appStore';
+
+const Dashboard = lazy(() => import('@/pages/Dashboard').then((module) => ({ default: module.Dashboard })));
+const Projects = lazy(() => import('@/pages/Projects').then((module) => ({ default: module.Projects })));
+const Activities = lazy(() => import('@/pages/Activities').then((module) => ({ default: module.Activities })));
+const Reports = lazy(() => import('@/pages/Reports').then((module) => ({ default: module.Reports })));
+const Settings = lazy(() => import('@/pages/Settings').then((module) => ({ default: module.Settings })));
+const EmissionFactors = lazy(() => import('@/pages/EmissionFactors').then((module) => ({ default: module.EmissionFactors })));
+const Signatures = lazy(() => import('@/pages/Signatures').then((module) => ({ default: module.Signatures })));
+const AuditLog = lazy(() => import('@/pages/AuditLog').then((module) => ({ default: module.AuditLog })));
+const DataImport = lazy(() => import('@/pages/DataImport').then((module) => ({ default: module.DataImport })));
+const DataExport = lazy(() => import('@/pages/DataExport').then((module) => ({ default: module.DataExport })));
+const DataSources = lazy(() => import('@/pages/DataSources').then((module) => ({ default: module.DataSources })));
+const AIAssistant = lazy(() => import('@/pages/AIAssistant').then((module) => ({ default: module.AIAssistant })));
+const Analytics = lazy(() => import('@/pages/Analytics').then((module) => ({ default: module.Analytics })));
+const Calculations = lazy(() => import('@/pages/Calculations').then((module) => ({ default: module.Calculations })));
+const ESGGoals = lazy(() => import('@/pages/ESGGoals').then((module) => ({ default: module.ESGGoals })));
+const HelpGuide = lazy(() => import('@/pages/HelpGuide').then((module) => ({ default: module.HelpGuide })));
 
 // Protected Route wrapper
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -43,18 +44,6 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   
   return <>{children}</>;
 };
-
-// Help page component
-const Help: React.FC = () => (
-  <div className="p-6">
-    <h1 className="text-2xl font-bold text-earth-800 dark:text-earth-100 mb-4">
-      Help & Documentation
-    </h1>
-    <p className="text-earth-500 dark:text-earth-400">
-      Access guides, tutorials, and support resources.
-    </p>
-  </div>
-);
 
 const App: React.FC = () => {
   const { theme } = useThemeStore();
@@ -86,6 +75,7 @@ const App: React.FC = () => {
   return (
     <ToastProvider>
       <Router>
+        <Suspense fallback={<div className="p-6 text-sm text-earth-500">Loading…</div>}>
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={
@@ -100,7 +90,6 @@ const App: React.FC = () => {
               <Layout />
             </ProtectedRoute>
           }>
-            {/* Main Routes */}
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="projects" element={<Projects />} />
@@ -113,28 +102,22 @@ const App: React.FC = () => {
             <Route path="reports/*" element={<Reports />} />
             <Route path="goals" element={<ESGGoals />} />
             <Route path="goals/*" element={<ESGGoals />} />
-            
-            {/* Analytics */}
             <Route path="analytics" element={<Analytics />} />
             <Route path="analytics/*" element={<Analytics />} />
-            
-            {/* Tools */}
             <Route path="emission-factors" element={<EmissionFactors />} />
             <Route path="signatures" element={<Signatures />} />
             <Route path="audit-log" element={<AuditLog />} />
             <Route path="import" element={<DataImport />} />
             <Route path="export" element={<DataExport />} />
+            <Route path="connect" element={<DataSources />} />
             <Route path="ai-assistant" element={<AIAssistant />} />
-            
-            {/* Settings & Help */}
             <Route path="settings" element={<Settings />} />
             <Route path="settings/*" element={<Settings />} />
-            <Route path="help" element={<Help />} />
-            
-            {/* Fallback */}
+            <Route path="help" element={<HelpGuide />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>
+        </Suspense>
       </Router>
     </ToastProvider>
   );

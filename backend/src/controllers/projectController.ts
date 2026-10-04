@@ -187,7 +187,7 @@ export async function getProjects(req: Request, res: Response): Promise<void> {
  * Get a single project by ID
  */
 export async function getProject(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
 
   // Project is already loaded by middleware
   const project = (req as any).project;
@@ -246,7 +246,7 @@ export async function getProject(req: Request, res: Response): Promise<void> {
  * Update a project
  */
 export async function updateProject(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
   const userId = req.user!.id;
   const {
     name,
@@ -331,7 +331,7 @@ export async function updateProject(req: Request, res: Response): Promise<void> 
  * Delete a project
  */
 export async function deleteProject(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
   const userId = req.user!.id;
 
   // Check if user is owner
@@ -366,7 +366,7 @@ export async function deleteProject(req: Request, res: Response): Promise<void> 
  * Add a member to a project
  */
 export async function addProjectMember(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
   const { email, role } = req.body;
   const userId = req.user!.id;
 
@@ -416,7 +416,7 @@ export async function addProjectMember(req: Request, res: Response): Promise<voi
  * Update a project member's role
  */
 export async function updateProjectMember(req: Request, res: Response): Promise<void> {
-  const { id, memberId } = req.params;
+  const { id, memberId } = (req.params as Record<string, string>);
   const { role } = req.body;
   const userId = req.user!.id;
 
@@ -451,7 +451,7 @@ export async function updateProjectMember(req: Request, res: Response): Promise<
  * Remove a member from a project
  */
 export async function removeProjectMember(req: Request, res: Response): Promise<void> {
-  const { id, memberId } = req.params;
+  const { id, memberId } = (req.params as Record<string, string>);
   const userId = req.user!.id;
 
   // Cannot remove owner
@@ -485,7 +485,7 @@ export async function removeProjectMember(req: Request, res: Response): Promise<
  * Get project summary/dashboard data
  */
 export async function getProjectSummary(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
 
   // Get emissions summary by scope
   const emissionsByScope = await db.query(
@@ -571,7 +571,7 @@ export async function getProjectSummary(req: Request, res: Response): Promise<vo
  * Clone a project
  */
 export async function cloneProject(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
   const { name, reportingYear } = req.body;
   const userId = req.user!.id;
 
@@ -631,7 +631,7 @@ export async function cloneProject(req: Request, res: Response): Promise<void> {
  * Get project comparison (baseline vs reporting year)
  */
 export async function getProjectComparison(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
 
   // Get project details
   const projectResult = await db.query(
@@ -701,7 +701,7 @@ export async function getProjectComparison(req: Request, res: Response): Promise
  * Get project calculation history
  */
 export async function getCalculationHistory(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
   const { page = 1, limit = 20 } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 
@@ -783,7 +783,7 @@ export async function getCalculationHistory(req: Request, res: Response): Promis
  * Get project reports
  */
 export async function getProjectReports(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
   const { page = 1, limit = 20, standard, status } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 

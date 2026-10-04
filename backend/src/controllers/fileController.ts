@@ -39,12 +39,16 @@ async function logAudit(
  * Upload a file
  */
 export async function uploadFile(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const projectId = (req.params as Record<string, string>).projectId || req.body.projectId;
   const userId = req.user!.id;
   const file = req.file;
 
   if (!file) {
     throw new BadRequestError('No file provided');
+  }
+
+  if (!projectId) {
+    throw new BadRequestError('Project ID is required');
   }
 
   const fileId = generateId();
@@ -85,7 +89,7 @@ export async function uploadFile(req: Request, res: Response): Promise<void> {
  * Get all files for a project
  */
 export async function getFiles(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT f.*, u.name as uploaded_by_name
@@ -113,7 +117,7 @@ export async function getFiles(req: Request, res: Response): Promise<void> {
  * Download a file
  */
 export async function downloadFile(req: Request, res: Response): Promise<void> {
-  const { projectId, fileId } = req.params;
+  const { projectId, fileId } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT * FROM files WHERE id = $1 AND project_id = $2`,
@@ -138,7 +142,7 @@ export async function downloadFile(req: Request, res: Response): Promise<void> {
  * Delete a file
  */
 export async function deleteFile(req: Request, res: Response): Promise<void> {
-  const { projectId, fileId } = req.params;
+  const { projectId, fileId } = (req.params as Record<string, string>);
   const userId = req.user!.id;
 
   const result = await db.query(
@@ -170,12 +174,12 @@ export async function deleteFile(req: Request, res: Response): Promise<void> {
  * Parse Excel file and import activities
  */
 export async function parseExcelActivities(req: Request, res: Response): Promise<void> {
-  const { projectId, fileId } = req.params;
+  const fileId = (req.params as Record<string, string>).fileId || (req.params as Record<string, string>).id;
   const userId = req.user!.id;
 
   const fileResult = await db.query(
-    `SELECT * FROM files WHERE id = $1 AND project_id = $2`,
-    [fileId, projectId]
+    `SELECT * FROM files WHERE id = $1`,
+    [fileId]
   );
 
   if (fileResult.rows.length === 0) {
@@ -183,6 +187,10 @@ export async function parseExcelActivities(req: Request, res: Response): Promise
   }
 
   const file = fileResult.rows[0];
+  const projectId = (req.params as Record<string, string>).projectId || file.project_id;
+  if ((req.params as Record<string, string>).projectId && file.project_id !== (req.params as Record<string, string>).projectId) {
+    throw new NotFoundError('File not found');
+  }
   const filePath = path.join(UPLOAD_DIR, projectId, file.stored_name);
 
   if (!fs.existsSync(filePath)) {
@@ -213,10 +221,18 @@ export async function parseExcelActivities(req: Request, res: Response): Promise
     }
   }
 
+  const headers = data.length > 0 ? Object.keys(data[0] as object) : [];
+
+  await logAudit(userId, 'UPDATE', 'file', fileId, { action: 'parse', valid: activities.length }, projectId);
+
   // Return parsed data for preview (not yet saved)
   res.json({
     success: true,
     data: {
+      fileId,
+      projectId,
+      headers,
+      rows: data.slice(0, 20),
       parsed: activities,
       errors,
       summary: {
@@ -232,9 +248,45 @@ export async function parseExcelActivities(req: Request, res: Response): Promise
  * Import activities from parsed Excel data
  */
 export async function importExcelActivities(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
   const userId = req.user!.id;
-  const { activities } = req.body;
+  let projectId = (req.params as Record<string, string>).projectId || req.body.projectId;
+  let activities = req.body.activities;
+
+  if ((!Array.isArray(activities) || activities.length === 0) && req.body.mappings) {
+    const fileId = (req.params as Record<string, string>).id || (req.params as Record<string, string>).fileId || req.body.fileId;
+    const fileResult = await db.query(`SELECT * FROM files WHERE id = $1`, [fileId]);
+    if (fileResult.rows.length === 0) {
+      throw new NotFoundError('File not found');
+    }
+    const file = fileResult.rows[0];
+    projectId = projectId || file.project_id;
+    const filePath = path.join(UPLOAD_DIR, file.project_id, file.stored_name);
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundError('File not found on disk');
+    }
+    const workbook = XLSX.readFile(filePath);
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(worksheet) as Record<string, unknown>[];
+    const mappings = req.body.mappings as Record<string, string>;
+    activities = [];
+    for (let i = 0; i < rows.length; i++) {
+      const remapped: Record<string, unknown> = { ...rows[i] };
+      for (const [target, source] of Object.entries(mappings)) {
+        if (source && rows[i][source] !== undefined) {
+          remapped[target] = rows[i][source];
+        }
+      }
+      try {
+        activities.push(parseActivityRow(remapped, i + 2));
+      } catch (error: any) {
+        throw new BadRequestError(error.message);
+      }
+    }
+  }
+
+  if (!projectId) {
+    throw new BadRequestError('Project ID is required');
+  }
 
   if (!Array.isArray(activities) || activities.length === 0) {
     throw new BadRequestError('Activities array is required');
@@ -300,7 +352,7 @@ export async function importExcelActivities(req: Request, res: Response): Promis
  * Export activities to Excel
  */
 export async function exportActivitiesToExcel(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const { scope } = req.query;
 
   let whereClause = 'WHERE project_id = $1';
@@ -556,7 +608,7 @@ function parseActivityRow(row: any, rowNumber: number): any {
  * Get files for a project (alias for getFiles for route compatibility)
  */
 export async function getProjectFiles(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT f.*, u.name as uploaded_by_name
@@ -587,7 +639,7 @@ export async function getProjectFiles(req: Request, res: Response): Promise<void
  * Get single file info
  */
 export async function getFile(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT f.*, u.name as uploaded_by_name, p.name as project_name
@@ -628,7 +680,7 @@ export async function getFile(req: Request, res: Response): Promise<void> {
  * Download file template
  */
 export async function downloadTemplate(req: Request, res: Response): Promise<void> {
-  const { format } = req.params;
+  const { format } = (req.params as Record<string, string>);
 
   const validFormats = ['xlsx', 'csv', 'json'];
   if (!validFormats.includes(format.toLowerCase())) {
@@ -702,7 +754,7 @@ export async function downloadTemplate(req: Request, res: Response): Promise<voi
  * Re-parse file (if parsing failed initially)
  */
 export async function reparseFile(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
   const userId = req.user!.id;
 
   // Get file info

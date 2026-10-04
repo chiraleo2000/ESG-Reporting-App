@@ -124,10 +124,19 @@ export function useReports(projectId?: string): UseReportsResult {
   }, []);
 
   const deleteReport = useCallback(async (reportId: string): Promise<boolean> => {
-    // Note: Need to add delete endpoint to API if not exists
-    // For now, return false
-    setError('Delete not implemented');
-    return false;
+    setError(null);
+    try {
+      const response = await reportsApi.delete(reportId);
+      if (response.success) {
+        setReports((current) => current.filter((report) => report.id !== reportId));
+        return true;
+      }
+      setError(response.error || 'Failed to delete report');
+      return false;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      return false;
+    }
   }, []);
 
   return {

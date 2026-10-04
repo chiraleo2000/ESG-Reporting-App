@@ -132,7 +132,7 @@ export async function getGridEmissionFactors(req: Request, res: Response): Promi
  * Get grid emission factor by region and year
  */
 export async function getGridEmissionFactor(req: Request, res: Response): Promise<void> {
-  const { region, year } = req.params;
+  const { region, year } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT * FROM grid_emission_factors 
@@ -229,7 +229,7 @@ export async function upsertGridEmissionFactor(req: Request, res: Response): Pro
  * Delete grid emission factor (admin only)
  */
 export async function deleteGridEmissionFactor(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
   const userId = req.user!.id;
 
   const result = await db.query(
@@ -314,7 +314,7 @@ export async function getPrecursorFactors(req: Request, res: Response): Promise<
  * Get precursor factor by material and route
  */
 export async function getPrecursorFactor(req: Request, res: Response): Promise<void> {
-  const { material, route } = req.params;
+  const { material, route } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT * FROM precursor_factors 
@@ -403,7 +403,7 @@ export async function upsertPrecursorFactor(req: Request, res: Response): Promis
  * Delete precursor factor (admin only)
  */
 export async function deletePrecursorFactor(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
   const userId = req.user!.id;
 
   const result = await db.query(
@@ -629,7 +629,7 @@ export async function serpAPILookup(req: Request, res: Response): Promise<void> 
  * Get grid emission factor for a country and year
  */
 export async function getGridEF(req: Request, res: Response): Promise<void> {
-  const { country, year } = req.params;
+  const { country, year } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT * FROM grid_emission_factors 
@@ -665,7 +665,7 @@ export async function getGridEF(req: Request, res: Response): Promise<void> {
  * Get grid emission factor history for a country
  */
 export async function getGridEFHistory(req: Request, res: Response): Promise<void> {
-  const { country } = req.params;
+  const { country } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT * FROM grid_emission_factors 
@@ -748,7 +748,7 @@ export async function overrideGridEF(req: Request, res: Response): Promise<void>
  */
 export async function deleteGridEFOverride(req: Request, res: Response): Promise<void> {
   const userId = req.user!.id;
-  const { projectId, country } = req.params;
+  const { projectId, country } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `DELETE FROM grid_ef_overrides 
@@ -798,7 +798,7 @@ export async function getPrecursorDefaults(req: Request, res: Response): Promise
  * Get precursor factors for a project (including overrides)
  */
 export async function getProjectPrecursorFactors(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
 
   // Get default factors
   const defaultsResult = await db.query(
@@ -903,7 +903,7 @@ export async function overridePrecursorFactor(req: Request, res: Response): Prom
  */
 export async function deletePrecursorOverride(req: Request, res: Response): Promise<void> {
   const userId = req.user!.id;
-  const { projectId, materialType, productionRoute } = req.params;
+  const { projectId, materialType, productionRoute } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `DELETE FROM precursor_factor_overrides 
@@ -930,7 +930,7 @@ export async function deletePrecursorOverride(req: Request, res: Response): Prom
  * Get standard emission factors by standard
  */
 export async function getStandardEFs(req: Request, res: Response): Promise<void> {
-  const { standard } = req.params;
+  const { standard } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT * FROM emission_factors 

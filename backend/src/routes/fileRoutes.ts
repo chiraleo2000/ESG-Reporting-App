@@ -78,4 +78,16 @@ router.post(
   asyncHandler(fileController.reparseFile)
 );
 
+// Preview activities in an uploaded workbook
+router.post(
+  '/:id/parse',
+  asyncHandler(fileController.parseExcelActivities)
+);
+
+// Create activities from a parsed workbook
+router.post(
+  '/:id/import',
+  asyncHandler(fileController.importExcelActivities)
+);
+
 export default router;

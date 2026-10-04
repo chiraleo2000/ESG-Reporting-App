@@ -269,7 +269,7 @@ export const getConversationHistory = async (req: Request, res: Response, next: 
   try {
     await ensureInitialized();
 
-    const { sessionId } = req.params;
+    const { sessionId } = (req.params as Record<string, string>);
     const limit = parseInt(req.query.limit as string) || 50;
 
     if (!sessionId) {

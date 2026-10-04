@@ -30,7 +30,7 @@ async function logAudit(
  * Create a new activity
  */
 export async function createActivity(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const userId = req.user!.id;
   const {
     name,
@@ -104,7 +104,7 @@ export async function createActivity(req: Request, res: Response): Promise<void>
  * Get all activities for a project
  */
 export async function getActivities(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const { page = 1, limit = 50, scope, status, search } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 
@@ -162,7 +162,7 @@ export async function getActivities(req: Request, res: Response): Promise<void> 
  * Get a single activity
  */
 export async function getActivity(req: Request, res: Response): Promise<void> {
-  const { projectId, activityId } = req.params;
+  const { projectId, activityId } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT * FROM activities WHERE id = $1 AND project_id = $2`,
@@ -192,7 +192,7 @@ export async function getActivity(req: Request, res: Response): Promise<void> {
  * Update an activity
  */
 export async function updateActivity(req: Request, res: Response): Promise<void> {
-  const { projectId, activityId } = req.params;
+  const { projectId, activityId } = (req.params as Record<string, string>);
   const userId = req.user!.id;
   const updates = req.body;
 
@@ -269,7 +269,7 @@ export async function updateActivity(req: Request, res: Response): Promise<void>
  * Delete an activity
  */
 export async function deleteActivity(req: Request, res: Response): Promise<void> {
-  const { projectId, activityId } = req.params;
+  const { projectId, activityId } = (req.params as Record<string, string>);
   const userId = req.user!.id;
 
   const result = await db.query(
@@ -294,7 +294,7 @@ export async function deleteActivity(req: Request, res: Response): Promise<void>
  * Bulk create activities
  */
 export async function bulkCreateActivities(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const userId = req.user!.id;
   const { activities } = req.body;
 
@@ -369,7 +369,7 @@ export async function bulkCreateActivities(req: Request, res: Response): Promise
  * Bulk delete activities
  */
 export async function bulkDeleteActivities(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const userId = req.user!.id;
   const { activityIds } = req.body;
 
@@ -400,7 +400,7 @@ export async function bulkDeleteActivities(req: Request, res: Response): Promise
  * Get activities by scope
  */
 export async function getActivitiesByScope(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const { scope } = req.query;
 
   if (!scope) {
@@ -424,7 +424,7 @@ export async function getActivitiesByScope(req: Request, res: Response): Promise
  * Get activities by Scope 3 category
  */
 export async function getActivitiesByCategory(req: Request, res: Response): Promise<void> {
-  const { projectId, category } = req.params;
+  const { projectId, category } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT * FROM activities 
@@ -443,7 +443,7 @@ export async function getActivitiesByCategory(req: Request, res: Response): Prom
  * Get activity summary for a project
  */
 export async function getActivitySummary(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
 
   // Summary by scope
   const scopeSummary = await db.query(
@@ -513,7 +513,7 @@ export async function getActivitySummary(req: Request, res: Response): Promise<v
  * Create activity for a specific project (project ID from URL param)
  */
 export async function createActivityForProject(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const userId = req.user!.id;
   const {
     name,
@@ -593,7 +593,7 @@ export async function createActivityForProject(req: Request, res: Response): Pro
  * Export activities to CSV
  */
 export async function exportActivities(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const { format = 'csv' } = req.query;
 
   // Get all activities for the project

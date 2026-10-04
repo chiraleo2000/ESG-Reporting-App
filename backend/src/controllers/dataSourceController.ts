@@ -15,7 +15,7 @@ import type { ConnectorType } from '../integrations';
  * POST /api/v1/data-sources/:projectId
  */
 export async function createDataSource(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const userId = (req as any).user?.id;
   const { name, type, config, schedule, mapping } = req.body;
 
@@ -48,7 +48,7 @@ export async function createDataSource(req: Request, res: Response): Promise<voi
  * GET /api/v1/data-sources/:projectId
  */
 export async function getDataSources(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
 
   const dataSources = await dataSourceService.getDataSources(projectId);
 
@@ -64,7 +64,7 @@ export async function getDataSources(req: Request, res: Response): Promise<void>
  * GET /api/v1/data-sources/:projectId/:id
  */
 export async function getDataSource(req: Request, res: Response): Promise<void> {
-  const { projectId, id } = req.params;
+  const { projectId, id } = (req.params as Record<string, string>);
 
   const dataSource = await dataSourceService.getDataSource(id, projectId);
   if (!dataSource) {
@@ -82,7 +82,7 @@ export async function getDataSource(req: Request, res: Response): Promise<void> 
  * PUT /api/v1/data-sources/:projectId/:id
  */
 export async function updateDataSource(req: Request, res: Response): Promise<void> {
-  const { projectId, id } = req.params;
+  const { projectId, id } = (req.params as Record<string, string>);
   const userId = (req as any).user?.id;
   const { name, config, schedule, mapping, enabled } = req.body;
 
@@ -106,7 +106,7 @@ export async function updateDataSource(req: Request, res: Response): Promise<voi
  * DELETE /api/v1/data-sources/:projectId/:id
  */
 export async function deleteDataSource(req: Request, res: Response): Promise<void> {
-  const { projectId, id } = req.params;
+  const { projectId, id } = (req.params as Record<string, string>);
   const userId = (req as any).user?.id;
 
   const deleted = await dataSourceService.deleteDataSource(id, projectId, userId);
@@ -125,7 +125,7 @@ export async function deleteDataSource(req: Request, res: Response): Promise<voi
  * POST /api/v1/data-sources/:projectId/:id/sync
  */
 export async function triggerSync(req: Request, res: Response): Promise<void> {
-  const { projectId, id } = req.params;
+  const { projectId, id } = (req.params as Record<string, string>);
   const userId = (req as any).user?.id;
 
   const result = await dataSourceService.triggerSync(id, projectId, userId);

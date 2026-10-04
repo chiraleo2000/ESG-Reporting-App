@@ -95,18 +95,26 @@ export class RestApiConnector implements IDataConnector {
       axiosConfig.headers = headers;
 
       this.client = axios.create(axiosConfig);
-      
-      // Test connection with a HEAD request to the base URL
-      await this.client.head('/');
+
+      try {
+        await this.client.head('/');
+      } catch (healthError: any) {
+        const status = healthError.response?.status as number | undefined;
+        // 401/404/405 still prove the host answered. Network errors and 5xx do not.
+        const reachable = status !== undefined && status < 500;
+        if (!reachable) {
+          logger.error('REST API health check failed:', healthError.message);
+          this.client = null;
+          return false;
+        }
+        logger.info(`REST API reachable at ${this.config.baseUrl} (HEAD status ${status})`);
+      }
+
       logger.info(`REST API connected: ${this.config.baseUrl}`);
       return true;
     } catch (error: any) {
-      // Connection test may fail but that's okay - the base URL may not support HEAD
-      if (this.client) {
-        logger.info(`REST API client created for: ${this.config?.baseUrl} (health check skipped)`);
-        return true;
-      }
       logger.error('REST API connection failed:', error.message);
+      this.client = null;
       return false;
     }
   }

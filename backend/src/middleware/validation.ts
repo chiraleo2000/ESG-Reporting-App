@@ -16,15 +16,19 @@ export const validate = (
       const result = schema.safeParse(data);
 
       if (!result.success) {
-        const errors = result.error.errors.map((err) => ({
+        const errors = result.error.issues.map((err) => ({
           field: err.path.join('.'),
           message: err.message,
         }));
         throw new ValidationError('Validation failed', errors);
       }
 
-      // Replace the source data with the parsed (and potentially transformed) data
-      req[source] = result.data;
+      // Express 5 exposes req.query as a getter, so parsed query stays on the request as-is.
+      if (source === 'body') {
+        req.body = result.data;
+      } else if (source === 'params') {
+        Object.assign(req.params, result.data);
+      }
       next();
     } catch (error) {
       next(error);
@@ -87,7 +91,7 @@ const projectBaseSchema = z.object({
   reportingStandards: z.array(reportingStandardEnum).default([]),
   baselineYear: yearSchema,
   reportingYear: yearSchema,
-  settings: z.record(z.any()).optional(),
+  settings: z.record(z.string(), z.any()).optional(),
 });
 
 export const createProjectSchema = projectBaseSchema.refine((data) => data.baselineYear <= data.reportingYear, {
@@ -115,7 +119,7 @@ export const createActivitySchema = z.object({
   tierDirection: z.enum(['upstream', 'downstream', 'both']).default('both'),
   dataSource: z.string().max(255).optional().nullable(),
   dataQualityScore: z.coerce.number().min(1).max(5).optional().nullable(),
-  metadata: z.record(z.any()).optional().nullable(),
+  metadata: z.record(z.string(), z.any()).optional().nullable(),
 });
 
 export const updateActivitySchema = createActivitySchema.partial().omit({ projectId: true });

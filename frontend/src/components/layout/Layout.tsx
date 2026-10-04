@@ -1,33 +1,32 @@
 import React from 'react';
-import { Outlet } from 'react-router-dom';
-import { Sidebar } from './Sidebar';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Header } from './Header';
-import { useThemeStore } from '@/store';
+import { MainNav } from './MainNav';
+import { useAppStore } from '@/store/appStore';
+
+const PROJECT_FREE = ['/dashboard', '/projects', '/settings', '/help', '/audit-log'];
 
 export const Layout: React.FC = () => {
-  const { sidebarCollapsed } = useThemeStore();
+  const location = useLocation();
+  const currentProject = useAppStore((state) => state.currentProject);
+  const needsProject = !PROJECT_FREE.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
 
   return (
     <div className="min-h-screen bg-earth-50 dark:bg-earth-900">
-      {/* Sidebar */}
-      <Sidebar />
-
-      {/* Main Content Area */}
-      <div
-        className={`transition-all duration-300 ${
-          sidebarCollapsed ? 'ml-20' : 'ml-[280px]'
-        }`}
-      >
-        {/* Header */}
-        <Header />
-
-        {/* Page Content */}
-        <main className="p-6 min-h-[calc(100vh-64px)]">
-          <div className="max-w-7xl mx-auto page-content">
-            <Outlet />
+      <Header />
+      <MainNav />
+      <main id="main-panel" className="mx-auto min-h-[calc(100vh-8rem)] max-w-7xl p-4 md:p-6">
+        {!currentProject && needsProject && (
+          <div className="mb-4 rounded-xl border border-azure-200 bg-azure-50 px-4 py-3 text-sm text-azure-800 dark:border-earth-600 dark:bg-earth-800 dark:text-earth-100">
+            Choose a project in the header, or{' '}
+            <Link className="font-semibold underline" to="/projects">
+              create one
+            </Link>
+            , before entering data.
           </div>
-        </main>
-      </div>
+        )}
+        <Outlet />
+      </main>
     </div>
   );
 };

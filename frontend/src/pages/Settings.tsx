@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/lib/motion';
 import {
   Settings as SettingsIcon,
   User,
@@ -29,6 +29,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { Badge } from '@/components/ui/Badge';
 import { useThemeStore, type ThemeMode, type AccentColor } from '@/store/themeStore';
 import { useAppStore } from '@/store/appStore';
+import { authApi } from '@/lib/api';
 
 const container = {
   hidden: { opacity: 0 },
@@ -58,6 +59,37 @@ const themeModes: { value: ThemeMode; name: string; icon: React.ElementType }[] 
   { value: 'dark', name: 'Dark', icon: Moon },
   { value: 'system', name: 'System', icon: Monitor },
 ];
+
+const PasswordForm: React.FC = () => {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <Card>
+      <h3 className="text-lg font-semibold text-earth-800 dark:text-earth-100">Change password</h3>
+      <div className="mt-4 grid max-w-md gap-3">
+        <Input label="Current password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+        <Input label="New password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+        {error && <p role="alert" className="text-sm text-error-600">{error}</p>}
+        {message && <p className="text-sm text-sustain-700">{message}</p>}
+        <Button
+          variant="primary"
+          onClick={async () => {
+            setError(null);
+            setMessage(null);
+            const response = await authApi.changePassword(currentPassword, newPassword);
+            if (!response.success) setError(response.error || 'Could not change password');
+            else setMessage('Password updated.');
+          }}
+        >
+          Update password
+        </Button>
+      </div>
+    </Card>
+  );
+};
 
 export const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState('appearance');
@@ -376,7 +408,7 @@ export const Settings: React.FC = () => {
                     </div>
                     <Input label="Email" type="email" defaultValue={user?.email || ''} />
                     <Input label="Job Title" defaultValue={user?.role || 'Viewer'} />
-                    <Input label="Organization" defaultValue={user?.company || ''} />
+                    <Input label="Organization" defaultValue={user?.organization || ''} />
                   </div>
                   <div className="mt-6">
                     <Button variant="primary">Save Changes</Button>
@@ -480,26 +512,13 @@ export const Settings: React.FC = () => {
               </motion.div>
             )}
 
-            {/* Placeholder for other tabs */}
-            {['security', 'shortcuts'].includes(activeTab) && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-              >
-                <Card variant="grass">
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <div className="w-16 h-16 rounded-full bg-grass-200 dark:bg-earth-600 flex items-center justify-center mb-4">
-                      <SettingsIcon className="w-8 h-8 text-grass-600 dark:text-grass-400" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-earth-800 dark:text-earth-100">
-                      {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Settings
-                    </h3>
-                    <p className="text-sm text-earth-500 dark:text-earth-400 mt-1">
-                      This section is coming soon
-                    </p>
-                  </div>
-                </Card>
-              </motion.div>
+            {activeTab === 'security' && <PasswordForm />}
+            {activeTab === 'shortcuts' && (
+              <Card>
+                <p className="text-sm text-earth-600 dark:text-earth-300">
+                  Use the large tabs at the top of the app. Left and right arrow keys move between them when a tab is focused.
+                </p>
+              </Card>
             )}
 
             {/* Data & Export Tab */}

@@ -234,11 +234,17 @@ export async function triggerSync(
     };
   }
 
-  // Register temporary sync and execute
-  SyncScheduler.schedule(
-    id, dataSource.name, projectId, dataSource.type,
-    dataSource.config, dataSource.mapping || {}, '* * * * *' // placeholder
-  );
+  if (dataSource.enabled && dataSource.schedule) {
+    SyncScheduler.schedule(
+      id, dataSource.name, projectId, dataSource.type,
+      dataSource.config, dataSource.mapping || {}, dataSource.schedule
+    );
+  } else {
+    SyncScheduler.stage(
+      id, dataSource.name, projectId, dataSource.type,
+      dataSource.config, dataSource.mapping || {}
+    );
+  }
 
   const result = await SyncScheduler.execute(id);
 

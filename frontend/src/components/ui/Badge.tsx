@@ -79,21 +79,21 @@ export const Badge: React.FC<BadgeProps> = ({
 
 // Status Badge with icon
 interface StatusBadgeProps {
-  status: 'active' | 'draft' | 'archived' | 'pending' | 'approved' | 'submitted';
+  status: string;
   className?: string;
 }
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className }) => {
-  const configs = {
-    active: { label: 'Active', variant: 'success' as const, dot: true },
-    draft: { label: 'Draft', variant: 'default' as const, dot: true },
-    archived: { label: 'Archived', variant: 'default' as const, dot: false },
-    pending: { label: 'Pending', variant: 'warning' as const, dot: true },
-    approved: { label: 'Approved', variant: 'success' as const, dot: false },
-    submitted: { label: 'Submitted', variant: 'info' as const, dot: false },
+  const configs: Record<string, { label: string; variant: 'success' | 'default' | 'warning' | 'info'; dot: boolean }> = {
+    active: { label: 'Active', variant: 'success', dot: true },
+    draft: { label: 'Draft', variant: 'default', dot: true },
+    archived: { label: 'Archived', variant: 'default', dot: false },
+    pending: { label: 'Pending', variant: 'warning', dot: true },
+    approved: { label: 'Approved', variant: 'success', dot: false },
+    submitted: { label: 'Submitted', variant: 'info', dot: false },
   };
 
-  const config = configs[status];
+  const config = configs[status] || { label: status || 'Unknown', variant: 'default' as const, dot: false };
 
   return (
     <Badge variant={config.variant} dot={config.dot} className={className}>

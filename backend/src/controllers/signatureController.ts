@@ -79,35 +79,35 @@ export async function signReport(req: Request, res: Response): Promise<void> {
     signatureType || 'approval'
   );
 
-  // Save signature
+  // Save signature using the columns defined on the signatures table
   await db.query(
     `INSERT INTO signatures (
-      id, report_id, user_id, signature_type, signature_hash, 
-      signature_data, declaration_text, comments
+      id, report_id, signer_id, signer_name, signer_email, signer_role, signer_title,
+      signature_hash, content_hash, signature_data, signature_type
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10)`,
     [
       signatureId,
       reportId,
       userId,
-      signatureType || 'approval',
+      req.body.signerName || req.user!.name,
+      req.user!.email,
+      userRole,
+      req.body.signerTitle || null,
       signatureData.hash,
       JSON.stringify(signatureData),
-      declarationText || getDefaultDeclaration(report.standard),
-      comments,
+      signatureType || 'approval',
     ]
   );
 
-  // Update report status
   await db.query(
-    `UPDATE reports SET 
-       status = 'signed',
-       signed_at = NOW(),
-       signed_by = $1,
-       signature_id = $2,
+    `UPDATE reports SET
+       status = 'approved',
+       approved_at = NOW(),
+       approved_by = $1,
        updated_at = NOW()
-     WHERE id = $3`,
-    [userId, signatureId, reportId]
+     WHERE id = $2`,
+    [userId, reportId]
   );
 
   await logAudit(userId, 'SIGN_REPORT', 'signature', signatureId, {
@@ -141,15 +141,14 @@ export async function signReport(req: Request, res: Response): Promise<void> {
  * Verify a signature
  */
 export async function verifySignature(req: Request, res: Response): Promise<void> {
-  const { reportId } = req.params;
+  const { reportId } = (req.params as Record<string, string>);
 
   // Get report with signature
   const reportResult = await db.query(
     `SELECT r.*, s.id as signature_id, s.signature_hash, s.signature_data,
-            s.created_at as signed_at, u.name as signer_name, u.role as signer_role
+            s.signed_at, s.signer_name, s.signer_role
      FROM reports r
-     LEFT JOIN signatures s ON r.signature_id = s.id
-     LEFT JOIN users u ON s.user_id = u.id
+     LEFT JOIN signatures s ON s.report_id = r.id AND s.revoked_at IS NULL
      WHERE r.id = $1`,
     [reportId]
   );
@@ -201,7 +200,7 @@ export async function verifySignature(req: Request, res: Response): Promise<void
  * Get signatures for a project
  */
 export async function getProjectSignatures(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const { page = 1, limit = 20 } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 
@@ -214,10 +213,11 @@ export async function getProjectSignatures(req: Request, res: Response): Promise
   const total = parseInt(countResult.rows[0].count);
 
   const result = await db.query(
-    `SELECT s.*, r.standard, r.format, u.name as signer_name, u.email as signer_email, u.role as signer_role
+    `SELECT s.id, s.report_id, s.signature_type, s.signature_hash,
+            s.signer_name, s.signer_email, s.signer_role, s.signed_at, s.created_at, s.revoked_at,
+            r.standard
      FROM signatures s
      JOIN reports r ON s.report_id = r.id
-     JOIN users u ON s.user_id = u.id
      WHERE r.project_id = $1
      ORDER BY s.created_at DESC
      LIMIT $2 OFFSET $3`,
@@ -238,10 +238,8 @@ export async function getProjectSignatures(req: Request, res: Response): Promise
         email: row.signer_email,
         role: row.signer_role,
       },
-      declarationText: row.declaration_text,
-      comments: row.comments,
-      isRevoked: row.is_revoked,
-      createdAt: row.created_at,
+      isRevoked: Boolean(row.revoked_at),
+      createdAt: row.signed_at || row.created_at,
     })),
     pagination: {
       page: Number(page),
@@ -256,14 +254,14 @@ export async function getProjectSignatures(req: Request, res: Response): Promise
  * Get signature details
  */
 export async function getSignature(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT s.*, r.standard, r.format, r.project_id,
             u.name as signer_name, u.email as signer_email, u.role as signer_role
      FROM signatures s
      JOIN reports r ON s.report_id = r.id
-     JOIN users u ON s.user_id = u.id
+     JOIN users u ON s.signer_id = u.id
      WHERE s.id = $1`,
     [id]
   );
@@ -304,7 +302,7 @@ export async function getSignature(req: Request, res: Response): Promise<void> {
  * Revoke a signature
  */
 export async function revokeSignature(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
   const userId = req.user!.id;
   const { reason } = req.body;
 
@@ -324,22 +322,22 @@ export async function revokeSignature(req: Request, res: Response): Promise<void
   const signature = signatureResult.rows[0];
 
   // Check if already revoked
-  if (signature.is_revoked) {
+  if (signature.revoked_at) {
     throw new BadRequestError('Signature is already revoked');
   }
 
   // Verify user is authorized (must be signer or owner)
-  if (signature.user_id !== userId && req.user!.role !== 'owner') {
+  if (signature.signer_id !== userId && req.user!.role !== 'owner') {
     throw new ForbiddenError('You can only revoke your own signatures');
   }
 
   // Revoke signature
   await db.query(
     `UPDATE signatures SET
-       is_revoked = true,
+       is_valid = false,
        revoked_at = NOW(),
        revoked_by = $1,
-       revoked_reason = $2
+       revocation_reason = $2
      WHERE id = $3`,
     [userId, reason || 'No reason provided', id]
   );
@@ -347,10 +345,7 @@ export async function revokeSignature(req: Request, res: Response): Promise<void
   // Update report status back to generated
   await db.query(
     `UPDATE reports SET
-       status = 'generated',
-       signed_at = NULL,
-       signed_by = NULL,
-       signature_id = NULL,
+       status = 'draft',
        updated_at = NOW()
      WHERE id = $1`,
     [signature.report_id]

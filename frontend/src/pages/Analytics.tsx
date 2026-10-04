@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
+import { motion } from '@/lib/motion';
 import {
   BarChart3,
   TrendingUp,
@@ -137,7 +138,10 @@ function generateInsights(s1: number, s2: number, s3: number, total: number) {
 }
 
 export const Analytics: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'trends' | 'benchmarks' | 'insights'>('overview');
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState<'overview' | 'trends' | 'benchmarks' | 'insights'>(
+    location.pathname.includes('/trends') ? 'trends' : location.pathname.includes('/benchmarks') ? 'benchmarks' : 'overview'
+  );
   const [selectedPeriod, setSelectedPeriod] = useState('1y');
   const [selectedProject, setSelectedProject] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -306,6 +310,12 @@ export const Analytics: React.FC = () => {
   useEffect(() => {
     loadAnalyticsData();
   }, [loadAnalyticsData]);
+
+  useEffect(() => {
+    if (location.pathname.includes('/trends')) setActiveTab('trends');
+    else if (location.pathname.includes('/benchmarks')) setActiveTab('benchmarks');
+    else if (location.pathname.endsWith('/analytics')) setActiveTab('overview');
+  }, [location.pathname]);
 
   const totalEmissions = Object.values(emissionsByScope).reduce((sum, s) => sum + s.value, 0);
   const maxMonthlyTotal = Math.max(...monthlyTrend.map(m => m.total), 1);

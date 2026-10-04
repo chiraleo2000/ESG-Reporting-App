@@ -200,8 +200,8 @@ npx playwright test
 
 | Layer | Technology |
 |-------|------------|
-| **Frontend** | React 18, TypeScript, Vite, Tailwind CSS |
-| **Backend** | Node.js, Express, TypeScript |
+| **Frontend** | React 19, TypeScript, Vite 8, Tailwind CSS 4 |
+| **Backend** | Node.js 22, Express 5, TypeScript |
 | **Database** | PostgreSQL 16 + pgvector |
 | **Cache** | Redis 7 |
 | **Container** | Docker, Docker Compose |
@@ -253,7 +253,17 @@ docker compose up -d
 
 ---
 
-## � Changelog
+## Changelog
+
+### v0.3.0 (2026-10-04)
+
+- Large main tabs replace the nested sidebar, with a project switcher in the header
+- Connect hub for REST, SFTP, and spreadsheet sources, with a required connection test
+- Import, export, signatures, audit log, and calculation history use the live API
+- Access tokens refresh once on expiry, and GET requests retry once after a failure
+- Frontend moved to React 19, Vite 8, and Tailwind 4; backend moved to Express 5 and Zod 4
+- Demo `admin` accounts are treated as owners so they can connect sources and sign reports
+
 ### v3.0.0 (2026-02-26)
 
 **🔌 External Data Integration Layer**

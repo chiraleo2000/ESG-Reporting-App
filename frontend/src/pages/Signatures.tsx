@@ -1,427 +1,145 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import {
-  FileSignature,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  Shield,
-  Download,
-  Eye,
-  Search,
-  Filter,
-  Calendar,
-  User,
-  FileText,
-  Lock,
-  Loader2,
-} from 'lucide-react';
-import { Card, CardHeader } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Badge } from '@/components/ui/Badge';
+import React, { useCallback, useEffect, useState } from 'react';
+import { reportsApi, signaturesApi } from '@/lib/api';
 import { useAppStore } from '@/store/appStore';
-import { signaturesApi, projectsApi, reportsApi } from '@/lib/api';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 
-const container = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.05 } },
-};
-
-const item = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 },
-};
-
-// Demo signatures data
-const demoSignatures = [
-  {
-    id: '1',
-    reportName: 'EU CBAM Report - Q4 2025',
-    projectName: 'Manufacturing Plant 2025',
-    standard: 'EU CBAM',
-    signedBy: 'Admin User',
-    signedAt: '2025-12-28T10:30:00Z',
-    signatureType: 'approval',
-    status: 'valid',
-    hash: 'sha256:a7f3b2...d8e1',
-  },
-  {
-    id: '2',
-    reportName: 'Thai-ESG Report 2025',
-    projectName: 'Manufacturing Plant 2025',
-    standard: 'Thai-ESG',
-    signedBy: 'Project Manager',
-    signedAt: '2025-12-27T15:45:00Z',
-    signatureType: 'submission',
-    status: 'valid',
-    hash: 'sha256:c9d4e5...f2a3',
-  },
-  {
-    id: '3',
-    reportName: 'K-ESG Report 2025',
-    projectName: 'Office Operations Carbon Footprint',
-    standard: 'K-ESG',
-    signedBy: 'Admin User',
-    signedAt: '2025-12-26T09:15:00Z',
-    signatureType: 'approval',
-    status: 'pending',
-    hash: 'sha256:pending...',
-  },
-  {
-    id: '4',
-    reportName: 'MAFF ESG Report 2025',
-    projectName: 'Office Operations Carbon Footprint',
-    standard: 'MAFF ESG',
-    signedBy: 'External Auditor',
-    signedAt: '2025-12-25T14:20:00Z',
-    signatureType: 'audit',
-    status: 'valid',
-    hash: 'sha256:b8e2f1...c4d5',
-  },
-];
-
-// Demo pending documents
-const pendingDocuments = [
-  {
-    id: '1',
-    name: 'China Carbon Market Report - Q4 2025',
-    project: 'Supply Chain Scope 3 Assessment',
-    standard: 'China Carbon Market',
-    createdAt: '2025-12-29T08:00:00Z',
-    requiredSignatures: 2,
-    currentSignatures: 0,
-  },
-  {
-    id: '2',
-    name: 'EU CBAM Quarterly Report',
-    project: 'Supply Chain Scope 3 Assessment',
-    standard: 'EU CBAM',
-    createdAt: '2025-12-28T16:00:00Z',
-    requiredSignatures: 2,
-    currentSignatures: 1,
-  },
-];
+interface SignatureRow {
+  id: string;
+  reportId: string;
+  standard?: string;
+  signatureType?: string;
+  signer?: { name?: string; email?: string };
+  createdAt?: string;
+}
 
 export const Signatures: React.FC = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'signed'>('all');
+  const { currentProject, user } = useAppStore();
+  const [rows, setRows] = useState<SignatureRow[]>([]);
+  const [reports, setReports] = useState<Array<{ id: string; title?: string; standard?: string }>>([]);
+  const [reportId, setReportId] = useState('');
+  const [title, setTitle] = useState('');
+  const [organization, setOrganization] = useState(user?.organization || '');
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [signatures, setSignatures] = useState(demoSignatures);
-  const [pendingDocs, setPendingDocs] = useState(pendingDocuments);
-  const { user } = useAppStore();
 
-  const fetchSignatures = useCallback(async () => {
-    setLoading(true);
-    try {
-      const projectsRes = await projectsApi.getAll();
-      const projects = projectsRes?.data || projectsRes || [];
-      if (Array.isArray(projects) && projects.length > 0) {
-        const allSigs: any[] = [];
-        for (const project of projects.slice(0, 5)) {
-          try {
-            // Get reports for the project, then get signatures for each report
-            const reportsRes = await reportsApi.getByProject(project.id);
-            const reports = reportsRes?.data || reportsRes || [];
-            if (Array.isArray(reports)) {
-              for (const report of reports.slice(0, 5)) {
-                try {
-                  const sigsRes = await signaturesApi.getByReport(report.id);
-                  const sigs = sigsRes?.data || sigsRes || [];
-                  if (Array.isArray(sigs)) {
-                    allSigs.push(...sigs.map((s: any) => ({
-                      id: s.id,
-                      reportName: report.title || report.name || `Report ${report.id}`,
-                      projectName: project.name || project.company_name || 'Project',
-                      standard: report.standard || s.standard || 'N/A',
-                      signedBy: s.signer_name || s.signerName || s.signed_by || 'Unknown',
-                      signedAt: s.signed_at || s.signedAt || s.created_at || new Date().toISOString(),
-                      signatureType: s.signature_type || s.signatureType || 'approval',
-                      status: s.status || 'valid',
-                      hash: s.hash || s.signature_hash || 'sha256:...',
-                    })));
-                  }
-                } catch {
-                  // Skip reports without signatures
-                }
-              }
-            }
-          } catch {
-            // Skip projects with no reports
-          }
-        }
-        if (allSigs.length > 0) {
-          setSignatures(allSigs);
-        }
-      }
-    } catch (err) {
-      console.warn('Signatures: API not available, using demo data');
-    } finally {
-      setLoading(false);
+  const load = useCallback(async () => {
+    if (!currentProject?.id) {
+      setRows([]);
+      setReports([]);
+      setError(null);
+      return;
     }
-  }, []);
+    setLoading(true);
+    setError(null);
+    const [signatureResponse, reportResponse] = await Promise.all([
+      signaturesApi.getByProject(currentProject.id),
+      reportsApi.getByProject(currentProject.id),
+    ]);
+    if (!signatureResponse.success) {
+      setRows([]);
+      setError(signatureResponse.error || 'Could not load signatures');
+    } else {
+      const data = signatureResponse.data;
+      setRows(Array.isArray(data) ? data as SignatureRow[] : []);
+    }
+    if (reportResponse.success) {
+      const data = reportResponse.data as { reports?: unknown[] } | unknown[] | undefined;
+      const list = Array.isArray(data) ? data : data?.reports || [];
+      setReports(Array.isArray(list) ? list as Array<{ id: string; title?: string; standard?: string }> : []);
+    }
+    setLoading(false);
+  }, [currentProject?.id]);
 
   useEffect(() => {
-    fetchSignatures();
-  }, [fetchSignatures]);
+    load();
+  }, [load]);
 
-  const filteredSignatures = signatures.filter((s) => {
-    const matchesSearch = s.reportName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         s.projectName.toLowerCase().includes(searchTerm.toLowerCase());
-    if (activeTab === 'pending') return matchesSearch && s.status === 'pending';
-    if (activeTab === 'signed') return matchesSearch && s.status === 'valid';
-    return matchesSearch;
-  });
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+  const sign = async () => {
+    if (!reportId || !user) return;
+    setNotice(null);
+    setError(null);
+    const response = await signaturesApi.sign(reportId, {
+      signerName: user.name,
+      signerTitle: title || user.role,
+      signerOrganization: organization || 'Independent',
     });
+    if (!response.success) {
+      setError(response.error || 'Could not sign the report');
+      return;
+    }
+    setNotice('Report signed.');
+    await load();
+  };
+
+  const verify = async (id: string) => {
+    setNotice(null);
+    setError(null);
+    const response = await signaturesApi.verify(id);
+    if (!response.success) {
+      setError(response.error || 'Verification failed');
+      return;
+    }
+    setNotice('Signature verified.');
   };
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-      <motion.div variants={item} className="flex justify-between items-start">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-earth-800 dark:text-earth-100">
-            Digital Signatures
-          </h1>
-          <p className="text-earth-500 dark:text-earth-400 mt-1">
-            Manage and verify document signatures for compliance reports
-          </p>
+          <h1 className="text-2xl font-semibold text-earth-800 dark:text-earth-100">Digital signatures</h1>
+          <p className="text-sm text-earth-500">Sign a report for the current project, or verify one that is already signed.</p>
         </div>
-      </motion.div>
+      </div>
 
-      {/* Stats Cards */}
-      <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card variant="grass" className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-grass-200 dark:bg-earth-600 flex items-center justify-center">
-              <FileSignature className="w-5 h-5 text-grass-600 dark:text-grass-400" />
-            </div>
-            <div>
-              <p className="text-sm text-earth-500">Total Signatures</p>
-              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{signatures.length}</p>
-            </div>
-          </div>
-        </Card>
-        <Card variant="grass" className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-            </div>
-            <div>
-              <p className="text-sm text-earth-500">Valid</p>
-              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">
-                {signatures.filter(s => s.status === 'valid').length}
-              </p>
-            </div>
-          </div>
-        </Card>
-        <Card variant="grass" className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div>
-              <p className="text-sm text-earth-500">Pending</p>
-              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">
-                {pendingDocs.length}
-              </p>
-            </div>
-          </div>
-        </Card>
-        <Card variant="grass" className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <p className="text-sm text-earth-500">Your Signatures</p>
-              <p className="text-xl font-bold text-earth-800 dark:text-earth-100">
-                {signatures.filter(s => s.signedBy === (user?.name || 'Admin User')).length}
-              </p>
-            </div>
-          </div>
-        </Card>
-      </motion.div>
+      {error && <div role="alert" className="rounded-lg border border-error-500 bg-red-50 px-4 py-3 text-sm text-error-600">{error}</div>}
+      {notice && <div className="rounded-lg border border-sustain-500 bg-green-50 px-4 py-3 text-sm text-sustain-700">{notice}</div>}
 
-      {/* Pending Documents */}
-      {pendingDocs.length > 0 && (
-        <motion.div variants={item}>
-          <Card variant="bordered" className="border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20">
-            <CardHeader
-              title="Documents Pending Signature"
-              subtitle={`${pendingDocs.length} documents require your signature`}
-              action={<Badge variant="warning">{pendingDocs.length} Pending</Badge>}
-            />
-            <div className="space-y-3 mt-4">
-              {pendingDocs.map((doc) => (
-                <div
-                  key={doc.id}
-                  className="flex items-center justify-between p-4 bg-white dark:bg-earth-800 rounded-xl border border-grass-100 dark:border-earth-700"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-amber-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-earth-800 dark:text-earth-100">{doc.name}</p>
-                      <p className="text-sm text-earth-500 dark:text-earth-400">
-                        {doc.project} • {doc.standard}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-sm text-earth-500">Signatures</p>
-                      <p className="font-medium text-earth-800 dark:text-earth-100">
-                        {doc.currentSignatures}/{doc.requiredSignatures}
-                      </p>
-                    </div>
-                    <Button variant="primary" size="sm">
-                      <FileSignature className="w-4 h-4 mr-2" />
-                      Sign
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </motion.div>
-      )}
-
-      {/* Search and Filters */}
-      <motion.div variants={item}>
-        <Card variant="default" className="p-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
-              <Input
-                placeholder="Search signatures..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                icon={<Search className="w-4 h-4" />}
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant={activeTab === 'all' ? 'primary' : 'outline'}
-                size="sm"
-                onClick={() => setActiveTab('all')}
-              >
-                All
-              </Button>
-              <Button
-                variant={activeTab === 'signed' ? 'primary' : 'outline'}
-                size="sm"
-                onClick={() => setActiveTab('signed')}
-              >
-                <CheckCircle className="w-4 h-4 mr-1" />
-                Signed
-              </Button>
-              <Button
-                variant={activeTab === 'pending' ? 'primary' : 'outline'}
-                size="sm"
-                onClick={() => setActiveTab('pending')}
-              >
-                <Clock className="w-4 h-4 mr-1" />
-                Pending
-              </Button>
-            </div>
-          </div>
-        </Card>
-      </motion.div>
-
-      {/* Signatures Table */}
-      <motion.div variants={item}>
-        <Card variant="default">
-          <CardHeader
-            title="Signature History"
-            subtitle={`${filteredSignatures.length} signatures`}
-          />
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-grass-100 dark:border-earth-700">
-                  <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Document</th>
-                  <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Standard</th>
-                  <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Signed By</th>
-                  <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Type</th>
-                  <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Date</th>
-                  <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Status</th>
-                  <th className="text-right p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSignatures.map((sig) => (
-                  <tr
-                    key={sig.id}
-                    className="border-b border-grass-50 dark:border-earth-800 hover:bg-grass-50 dark:hover:bg-earth-800/50 transition-colors"
-                  >
-                    <td className="p-3">
-                      <div>
-                        <p className="font-medium text-earth-800 dark:text-earth-100">{sig.reportName}</p>
-                        <p className="text-sm text-earth-500 dark:text-earth-400">{sig.projectName}</p>
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <Badge variant="default" size="sm">{sig.standard}</Badge>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-grass-200 flex items-center justify-center">
-                          <User className="w-3 h-3 text-grass-600" />
-                        </div>
-                        <span className="text-earth-700 dark:text-earth-300">{sig.signedBy}</span>
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <Badge
-                        variant={sig.signatureType === 'audit' ? 'grass' : sig.signatureType === 'submission' ? 'warning' : 'default'}
-                        size="sm"
-                      >
-                        {sig.signatureType}
-                      </Badge>
-                    </td>
-                    <td className="p-3 text-earth-600 dark:text-earth-400 text-sm">
-                      {formatDate(sig.signedAt)}
-                    </td>
-                    <td className="p-3">
-                      {sig.status === 'valid' ? (
-                        <Badge variant="grass" size="sm">
-                          <CheckCircle className="w-3 h-3 mr-1" />
-                          Valid
-                        </Badge>
-                      ) : (
-                        <Badge variant="warning" size="sm">
-                          <Clock className="w-3 h-3 mr-1" />
-                          Pending
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="p-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="sm">
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <Download className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
+      <Card>
+        <h2 className="mb-3 text-lg font-medium">Sign a report</h2>
+        {!currentProject ? (
+          <p className="text-sm text-earth-500">Select a project to see reports you can sign.</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="text-sm">
+              Report
+              <select className="mt-1 w-full rounded-lg border border-earth-200 px-3 py-2 dark:border-earth-600 dark:bg-earth-900" value={reportId} onChange={(event) => setReportId(event.target.value)}>
+                <option value="">Choose a report</option>
+                {reports.map((report) => (
+                  <option key={report.id} value={report.id}>{report.title || report.standard || report.id}</option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+            </label>
+            <label className="text-sm">
+              Title
+              <input className="mt-1 w-full rounded-lg border border-earth-200 px-3 py-2 dark:border-earth-600 dark:bg-earth-900" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Sustainability lead" />
+            </label>
+            <label className="text-sm md:col-span-2">
+              Organization
+              <input className="mt-1 w-full rounded-lg border border-earth-200 px-3 py-2 dark:border-earth-600 dark:bg-earth-900" value={organization} onChange={(event) => setOrganization(event.target.value)} />
+            </label>
+            <Button variant="primary" onClick={sign} disabled={!reportId}>Sign report</Button>
           </div>
-        </Card>
-      </motion.div>
-    </motion.div>
+        )}
+      </Card>
+
+      <Card>
+        <h2 className="mb-3 text-lg font-medium">Signatures on this project</h2>
+        {loading && <p className="text-sm text-earth-500">Loading signatures…</p>}
+        {!loading && rows.length === 0 && !error && <p className="text-sm text-earth-500">No signatures yet. Sign a report above.</p>}
+        <ul className="divide-y divide-earth-100 dark:divide-earth-700">
+          {rows.map((row) => (
+            <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
+              <div>
+                <p className="font-medium">{row.signer?.name || 'Signer'} · {row.standard || row.signatureType || 'approval'}</p>
+                <p className="text-earth-500">{row.createdAt ? new Date(row.createdAt).toLocaleString() : row.reportId}</p>
+              </div>
+              <Button variant="outline" onClick={() => verify(row.reportId)}>Verify</Button>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </div>
   );
 };
-
-export default Signatures;

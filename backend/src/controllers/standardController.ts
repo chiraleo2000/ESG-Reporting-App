@@ -208,7 +208,7 @@ export async function getSupportedStandards(req: Request, res: Response): Promis
  * Get standard details
  */
 export async function getStandardDetails(req: Request, res: Response): Promise<void> {
-  const { standardId } = req.params;
+  const { standardId } = (req.params as Record<string, string>);
 
   const config = STANDARD_CONFIGS[standardId as ReportStandard];
   if (!config) {
@@ -225,7 +225,7 @@ export async function getStandardDetails(req: Request, res: Response): Promise<v
  * Get standard requirements (fields and sections)
  */
 export async function getStandardRequirements(req: Request, res: Response): Promise<void> {
-  const { standardId } = req.params;
+  const { standardId } = (req.params as Record<string, string>);
 
   const config = STANDARD_CONFIGS[standardId as ReportStandard];
   if (!config) {
@@ -252,7 +252,7 @@ export async function getStandardRequirements(req: Request, res: Response): Prom
  * Get overlapping fields between two standards
  */
 export async function getStandardOverlap(req: Request, res: Response): Promise<void> {
-  const { standard1, standard2 } = req.params;
+  const { standard1, standard2 } = (req.params as Record<string, string>);
 
   const config1 = STANDARD_CONFIGS[standard1 as ReportStandard];
   const config2 = STANDARD_CONFIGS[standard2 as ReportStandard];
@@ -323,7 +323,7 @@ export async function getStandardOverlap(req: Request, res: Response): Promise<v
  * Get standard configuration (admin only)
  */
 export async function getStandardConfig(req: Request, res: Response): Promise<void> {
-  const { standardId } = req.params;
+  const { standardId } = (req.params as Record<string, string>);
 
   // Get custom configuration from database
   const result = await db.query(
@@ -353,7 +353,7 @@ export async function getStandardConfig(req: Request, res: Response): Promise<vo
  * Update standard configuration (admin only)
  */
 export async function updateStandardConfig(req: Request, res: Response): Promise<void> {
-  const { standardId } = req.params;
+  const { standardId } = (req.params as Record<string, string>);
   const { settings, overrides } = req.body;
 
   // Verify standard exists

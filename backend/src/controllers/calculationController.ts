@@ -31,7 +31,7 @@ async function logAudit(
  * Calculate emissions for a single activity
  */
 export async function calculateActivity(req: Request, res: Response): Promise<void> {
-  const { projectId, activityId } = req.params;
+  const { projectId, activityId } = (req.params as Record<string, string>);
   if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
   const userId = req.user.id;
   const { emissionFactorId, customEmissionFactor, tierLevel, includePrecursors } = req.body;
@@ -140,7 +140,7 @@ export async function calculateActivity(req: Request, res: Response): Promise<vo
  * Calculate all pending activities for a project
  */
 export async function calculateAllActivities(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
   const userId = req.user.id;
   const { includePrecursors = false } = req.body;
@@ -239,7 +239,7 @@ export async function calculateAllActivities(req: Request, res: Response): Promi
  * Calculate CFP (Carbon Footprint of Product)
  */
 export async function calculateCFP(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
   const userId = req.user.id;
   const { productName, functionalUnit, productionVolume, allocationMethod, includeBiogenic } = req.body;
@@ -378,7 +378,7 @@ export async function calculateCFP(req: Request, res: Response): Promise<void> {
  * Calculate CFO (Carbon Footprint of Organization)
  */
 export async function calculateCFO(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
   const userId = req.user.id;
   const { organizationName, consolidationMethod, operationalBoundary, reportingYear } = req.body;
@@ -509,7 +509,7 @@ export async function calculateCFO(req: Request, res: Response): Promise<void> {
  * Get CFP results for a project
  */
 export async function getCFPResults(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT * FROM cfp_results WHERE project_id = $1 ORDER BY created_at DESC`,
@@ -543,7 +543,7 @@ export async function getCFPResults(req: Request, res: Response): Promise<void> 
  * Get CFO results for a project
  */
 export async function getCFOResults(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT * FROM cfo_results WHERE project_id = $1 ORDER BY created_at DESC`,
@@ -580,7 +580,7 @@ export async function getCFOResults(req: Request, res: Response): Promise<void> 
  * Get project emission totals
  */
 export async function getProjectTotals(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
 
   // Get all calculated activities grouped by scope
   const result = await db.query(
@@ -658,7 +658,7 @@ export async function getProjectTotals(req: Request, res: Response): Promise<voi
  * Calculate both CFP and CFO
  */
 export async function calculateBoth(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
   const userId = req.user.id;
   const { 
@@ -890,7 +890,7 @@ export async function calculatePrecursors(req: Request, res: Response): Promise<
  * Get emissions hot spots analysis
  */
 export async function getHotSpots(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
 
   // Get activities sorted by emissions
   const result = await db.query(
@@ -971,7 +971,7 @@ export async function getHotSpots(req: Request, res: Response): Promise<void> {
  * Get data quality assessment for a project
  */
 export async function getDataQuality(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
 
   // Get activities with their data quality scores
   const result = await db.query(
@@ -1086,7 +1086,7 @@ function getQualityRecommendations(breakdown: any): string[] {
  * Compare emissions between baseline and reporting years
  */
 export async function compareYears(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const { baselineYear, reportingYear } = req.query;
 
   // Get project details

@@ -31,7 +31,7 @@ async function logAudit(
  * Generate a report for a specific standard
  */
 export async function generateReport(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const userId = req.user!.id;
   const { standard, format, options } = req.body;
 
@@ -127,7 +127,7 @@ export async function generateReport(req: Request, res: Response): Promise<void>
  * Generate reports for multiple standards (batch)
  */
 export async function generateBatchReports(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const userId = req.user!.id;
   const { standards, format, options } = req.body;
 
@@ -242,7 +242,7 @@ export async function generateBatchReports(req: Request, res: Response): Promise
  * Get all reports for a project
  */
 export async function getReports(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const { standard, status, page = 1, limit = 20 } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 
@@ -307,7 +307,7 @@ export async function getReports(req: Request, res: Response): Promise<void> {
  * Get a single report
  */
 export async function getReport(req: Request, res: Response): Promise<void> {
-  const { projectId, reportId } = req.params;
+  const { projectId, reportId } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT r.*, u.name as generated_by_name, s.name as signed_by_name
@@ -348,7 +348,7 @@ export async function getReport(req: Request, res: Response): Promise<void> {
  * Download report file
  */
 export async function downloadReport(req: Request, res: Response): Promise<void> {
-  const { projectId, reportId } = req.params;
+  const { projectId, reportId } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT r.*, p.name as project_name
@@ -380,7 +380,7 @@ export async function downloadReport(req: Request, res: Response): Promise<void>
  * Update report status
  */
 export async function updateReportStatus(req: Request, res: Response): Promise<void> {
-  const { projectId, reportId } = req.params;
+  const { projectId, reportId } = (req.params as Record<string, string>);
   const userId = req.user!.id;
   const { status } = req.body;
 
@@ -411,7 +411,7 @@ export async function updateReportStatus(req: Request, res: Response): Promise<v
  * Regenerate a report
  */
 export async function regenerateReport(req: Request, res: Response): Promise<void> {
-  const { projectId, reportId } = req.params;
+  const { projectId, reportId } = (req.params as Record<string, string>);
   const userId = req.user!.id;
   const { options } = req.body;
 
@@ -481,7 +481,7 @@ export async function regenerateReport(req: Request, res: Response): Promise<voi
  * Delete a report
  */
 export async function deleteReport(req: Request, res: Response): Promise<void> {
-  const { projectId, reportId } = req.params;
+  const { projectId, reportId } = (req.params as Record<string, string>);
   const userId = req.user!.id;
 
   // Check if report is signed
@@ -515,7 +515,7 @@ export async function deleteReport(req: Request, res: Response): Promise<void> {
  * Preview report data without generating file
  */
 export async function previewReport(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const { standard, options } = req.body;
 
   // Get project
@@ -551,7 +551,7 @@ export async function previewReport(req: Request, res: Response): Promise<void> 
  * Get report requirements for a standard
  */
 export async function getReportRequirements(req: Request, res: Response): Promise<void> {
-  const { standard } = req.params;
+  const { standard } = (req.params as Record<string, string>);
 
   const requirements = await reportService.getStandardRequirements(standard as ReportStandard);
 
@@ -677,7 +677,7 @@ export async function batchGenerateReports(req: Request, res: Response): Promise
  * Get batch status
  */
 export async function getBatchStatus(req: Request, res: Response): Promise<void> {
-  const { batchId } = req.params;
+  const { batchId } = (req.params as Record<string, string>);
 
   const cached = await redis.get(`batch:${batchId}`);
 
@@ -720,7 +720,7 @@ export async function getBatchStatus(req: Request, res: Response): Promise<void>
  * Get batch manifest (list of reports in batch)
  */
 export async function getBatchManifest(req: Request, res: Response): Promise<void> {
-  const { batchId } = req.params;
+  const { batchId } = (req.params as Record<string, string>);
 
   const result = await db.query(
     `SELECT r.id, r.standard, r.format, r.status, r.file_path, r.created_at,
@@ -765,7 +765,7 @@ export async function getBatchManifest(req: Request, res: Response): Promise<voi
  * Get reports for a project (alias for getReports for route compatibility)
  */
 export async function getProjectReports(req: Request, res: Response): Promise<void> {
-  const { projectId } = req.params;
+  const { projectId } = (req.params as Record<string, string>);
   const { standard, status, page = 1, limit = 20 } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 

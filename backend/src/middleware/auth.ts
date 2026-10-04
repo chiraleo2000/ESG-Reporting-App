@@ -46,9 +46,14 @@ export const authenticate = async (
 
     // Verify token
     const decoded = jwt.verify(token, config.jwt.secret) as AuthPayload;
+    const role = decoded.role === ('admin' as UserRole) ? 'owner' : decoded.role;
 
-    // Attach user to request
-    req.user = decoded;
+    // Attach user to request. Seeded demo accounts use role "admin".
+    req.user = {
+      ...decoded,
+      role,
+      signatureAuthorized: decoded.signatureAuthorized || config.signature.authorizedRoles.includes(role),
+    };
 
     next();
   } catch (error) {
@@ -137,7 +142,7 @@ export const authorizeProjectOwner = (projectIdParam: string = 'projectId') => {
         return next(new UnauthorizedError('Authentication required'));
       }
 
-      const projectId = req.params[projectIdParam] || req.body.projectId;
+      const projectId = (req.params as Record<string, string>)[projectIdParam] || req.body.projectId;
       
       if (!projectId) {
         return next(new ForbiddenError('Project ID required'));

@@ -1,6 +1,8 @@
 // API Service for ESG Reporting App
 // Full-featured API client for all backend endpoints
 
+import { useAppStore } from '../store/appStore';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:2047/api/v1';
 
 // Types
@@ -33,6 +35,7 @@ interface AuthResponse {
     role: string;
   };
   token: string;
+  refreshToken?: string;
 }
 
 interface Activity {
@@ -61,25 +64,98 @@ interface ReportGenerateOptions {
   options?: Record<string, boolean>;
 }
 
-// Helper to get auth token from localStorage
-const getAuthToken = (): string | null => {
+const REQUEST_TIMEOUT_MS = 20000;
+
+function errorText(data: { message?: unknown; error?: unknown }, status: number): string {
+  if (typeof data?.message === 'string' && data.message) return data.message;
+  if (typeof data?.error === 'string' && data.error) return data.error;
+  if (data?.error && typeof data.error === 'object' && 'message' in data.error) {
+    const message = (data.error as { message?: unknown }).message;
+    if (typeof message === 'string' && message) return message;
+  }
+  return `HTTP error! status: ${status}`;
+}
+
+type StoredAuth = { token: string | null; refreshToken: string | null };
+
+const readStoredAuth = (): StoredAuth => {
   try {
     const storage = localStorage.getItem('esg-app-storage');
     if (storage) {
       const parsed = JSON.parse(storage);
-      return parsed.state?.token || null;
+      return {
+        token: parsed.state?.token || null,
+        refreshToken: parsed.state?.refreshToken || null,
+      };
     }
   } catch {
-    return null;
+    return { token: null, refreshToken: null };
   }
-  return null;
+  return { token: null, refreshToken: null };
 };
 
-// Base fetch wrapper with auth
-async function apiFetch<T>(
+const getAuthToken = (): string | null => readStoredAuth().token;
+
+const persistAuthTokens = (token: string, refreshToken?: string) => {
+  const store = useAppStore.getState();
+  store.setToken(token);
+  if (refreshToken) store.setRefreshToken(refreshToken);
+  try {
+    const storage = localStorage.getItem('esg-app-storage');
+    const parsed = storage ? JSON.parse(storage) : { state: {}, version: 0 };
+    parsed.state = {
+      ...(parsed.state || {}),
+      token,
+      ...(refreshToken ? { refreshToken } : {}),
+    };
+    localStorage.setItem('esg-app-storage', JSON.stringify(parsed));
+  } catch {
+    /* storage unavailable */
+  }
+};
+
+const clearStoredSession = () => {
+  useAppStore.getState().logout();
+};
+
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const { refreshToken } = readStoredAuth();
+    if (!refreshToken) return null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+        signal: controller.signal,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.data?.token) return null;
+      persistAuthTokens(data.data.token, data.data.refreshToken);
+      return data.data.token as string;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
+// Base fetch wrapper with auth, timeout, one GET retry, and one 401 refresh
+async function apiFetch<T = any>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  attempt = 0
 ): Promise<ApiResponse<T>> {
+  const method = (options.method || 'GET').toUpperCase();
+  const isGet = method === 'GET';
   const token = getAuthToken();
 
   const headers: HeadersInit = {
@@ -91,28 +167,57 @@ async function apiFetch<T>(
     (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const parentSignal = options.signal;
+  if (parentSignal) {
+    if (parentSignal.aborted) controller.abort();
+    else parentSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       headers,
+      signal: controller.signal,
     });
 
-    const data = await response.json();
+    const contentType = response.headers.get('content-type') || '';
+    const data = contentType.includes('application/json')
+      ? await response.json().catch(() => ({}))
+      : { success: response.ok, message: response.statusText };
+
+    if (response.status === 401 && attempt === 0 && !endpoint.startsWith('/auth/')) {
+      const nextToken = await refreshAccessToken();
+      if (nextToken) {
+        return apiFetch<T>(endpoint, options, 1);
+      }
+      clearStoredSession();
+      return { success: false, error: 'Session expired. Please sign in again.' };
+    }
 
     if (!response.ok) {
+      if (isGet && response.status >= 500 && attempt === 0) {
+        return apiFetch<T>(endpoint, options, attempt + 1);
+      }
       return {
         success: false,
-        error: data.message || data.error || `HTTP error! status: ${response.status}`,
+        error: errorText(data, response.status),
       };
     }
 
     return data;
   } catch (error) {
-    console.error('API Error:', error);
+    if (isGet && attempt === 0) {
+      return apiFetch<T>(endpoint, options, attempt + 1);
+    }
+    const timedOut = error instanceof Error && error.name === 'AbortError';
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Network error occurred',
+      error: timedOut ? 'Request timed out' : error instanceof Error ? error.message : 'Network error occurred',
     };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -146,12 +251,20 @@ export const authApi = {
     return apiFetch('/auth/me');
   },
   
-  refreshToken: async (refreshToken: string): Promise<ApiResponse<{ token: string }>> => {
+  refreshToken: async (refreshToken: string): Promise<ApiResponse<{ token: string; refreshToken?: string }>> => {
     return apiFetch('/auth/refresh', {
       method: 'POST',
       body: JSON.stringify({ refreshToken }),
     });
   },
+
+  changePassword: async (currentPassword: string, newPassword: string) =>
+    apiFetch('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+
+  logout: async () => apiFetch('/auth/logout', { method: 'POST' }),
 };
 
 // Projects API
@@ -225,7 +338,7 @@ export const calculationsApi = {
   calculate: async (projectId: string) => apiFetch(`/calculate/project/${projectId}/all`, {
     method: 'POST',
   }),
-  getHistory: async (projectId: string) => apiFetch(`/calculate/project/${projectId}/history`),
+  getHistory: async (projectId: string) => apiFetch(`/projects/${projectId}/calculations`),
 };
 
 // Reports API
@@ -233,21 +346,12 @@ export const reportsApi = {
   // Get all reports for a project
   getByProject: async (projectId: string) => apiFetch(`/reports/project/${projectId}`),
 
-  // Get all reports
-  getAll: async () => apiFetch('/reports'),
-
   // Get a single report
   getById: async (id: string) => apiFetch(`/reports/${id}`),
 
   // Generate a new report
   generate: async (data: ReportGenerateOptions) => apiFetch('/reports/generate', {
     method: 'POST',
-    body: JSON.stringify(data),
-  }),
-
-  // Update a report
-  update: async (id: string, data: any) => apiFetch(`/reports/${id}`, {
-    method: 'PUT',
     body: JSON.stringify(data),
   }),
 
@@ -260,17 +364,6 @@ export const reportsApi = {
   download: async (id: string, format: string) => {
     return apiRawFetch(`/reports/${id}/download?format=${format}`);
   },
-
-  // Validate report against standard
-  validate: async (id: string, standard: string) => apiFetch(`/reports/${id}/validate`, {
-    method: 'POST',
-    body: JSON.stringify({ standard }),
-  }),
-
-  // Submit report for approval
-  submit: async (id: string) => apiFetch(`/reports/${id}/submit`, {
-    method: 'POST',
-  }),
 };
 
 // Emission Factors API
@@ -339,6 +432,10 @@ export const filesApi = {
     return response.json();
   },
 
+  listByProject: async (projectId: string) => apiFetch(`/files/project/${projectId}`),
+
+  downloadTemplate: async (format: string) => apiRawFetch(`/files/template/${format}`),
+
   // Get file info
   getById: async (id: string) => apiFetch(`/files/${id}`),
 
@@ -367,35 +464,35 @@ export const filesApi = {
 
 // Audit Logs API
 export const auditLogsApi = {
-  // Get audit logs
   getAll: async (params?: { projectId?: string; userId?: string; action?: string; limit?: number }) => {
+    if (!params?.projectId) {
+      return { success: false, error: 'Select a project to view its audit log.' };
+    }
     const queryParams = new URLSearchParams();
-    if (params?.projectId) queryParams.append('projectId', params.projectId);
-    if (params?.userId) queryParams.append('userId', params.userId);
-    if (params?.action) queryParams.append('action', params.action);
-    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params.userId) queryParams.append('userId', params.userId);
+    if (params.action) queryParams.append('action', params.action);
+    if (params.limit) queryParams.append('limit', params.limit.toString());
     const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
-    return apiFetch(`/audit-logs${query}`);
+    return apiFetch(`/audit-logs/project/${params.projectId}${query}`);
   },
 
-  // Get by project
   getByProject: async (projectId: string) => apiFetch(`/audit-logs/project/${projectId}`),
 };
 
 // Signatures API
 export const signaturesApi = {
-  // Sign a report
-  sign: async (reportId: string, data: { type: string; notes?: string }) =>
-    apiFetch(`/signatures/${reportId}`, {
+  sign: async (
+    reportId: string,
+    data: { signerName: string; signerTitle: string; signerOrganization: string; signatureType?: string; comments?: string }
+  ) =>
+    apiFetch('/signatures/sign', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ reportId, signatureType: data.signatureType || 'approval', ...data }),
     }),
 
-  // Get signatures for a report
-  getByReport: async (reportId: string) => apiFetch(`/signatures/report/${reportId}`),
+  getByProject: async (projectId: string) => apiFetch(`/signatures/project/${projectId}`),
 
-  // Verify a signature
-  verify: async (signatureId: string) => apiFetch(`/signatures/${signatureId}/verify`),
+  verify: async (reportId: string) => apiFetch(`/signatures/${reportId}/verify`),
 };
 
 // Standards API
@@ -405,13 +502,6 @@ export const standardsApi = {
 
   // Get standard details
   getById: async (standardId: string) => apiFetch(`/standards/${standardId}`),
-
-  // Validate data against a standard
-  validate: async (standardId: string, projectId: string) =>
-    apiFetch(`/standards/${standardId}/validate`, {
-      method: 'POST',
-      body: JSON.stringify({ projectId }),
-    }),
 };
 
 // ESG Goals API
@@ -460,6 +550,24 @@ export const goalsApi = {
   }),
 };
 
+export const dataSourcesApi = {
+  list: async (projectId: string) => apiFetch(`/data-sources/${projectId}`),
+  get: async (projectId: string, id: string) => apiFetch(`/data-sources/${projectId}/${id}`),
+  create: async (projectId: string, data: Record<string, unknown>) =>
+    apiFetch(`/data-sources/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  update: async (projectId: string, id: string, data: Record<string, unknown>) =>
+    apiFetch(`/data-sources/${projectId}/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  remove: async (projectId: string, id: string) =>
+    apiFetch(`/data-sources/${projectId}/${id}`, { method: 'DELETE' }),
+  sync: async (projectId: string, id: string) =>
+    apiFetch(`/data-sources/${projectId}/${id}/sync`, { method: 'POST' }),
+  testConnection: async (type: string, config: Record<string, unknown>) =>
+    apiFetch('/data-sources/test-connection', {
+      method: 'POST',
+      body: JSON.stringify({ type, config }),
+    }),
+};
+
 // Health check
 export const healthCheck = async (): Promise<boolean> => {
   try {
@@ -484,5 +592,6 @@ export default {
   signatures: signaturesApi,
   standards: standardsApi,
   goals: goalsApi,
+  dataSources: dataSourcesApi,
   healthCheck,
 };

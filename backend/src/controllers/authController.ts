@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { redisClient as redis } from '../config/redis';
 import { config } from '../config/env';
-import { generateToken, generateTokens, hashPassword, comparePassword } from '../middleware/auth';
+import { generateTokens, hashPassword, comparePassword, verifyRefreshToken } from '../middleware/auth';
 import { generateId } from '../utils/helpers';
 import { BadRequestError, UnauthorizedError, NotFoundError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
@@ -17,6 +17,18 @@ interface User {
   role: UserRole;
   createdAt: Date;
   updatedAt: Date;
+}
+
+function issueSessionTokens(user: User) {
+  const role = (user.role as string) === 'admin' ? 'owner' : user.role;
+  return generateTokens({
+    id: user.id,
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    role,
+    signatureAuthorized: config.signature.authorizedRoles.includes(role),
+  });
 }
 
 // Audit log helper
@@ -78,7 +90,7 @@ export async function register(req: Request, res: Response): Promise<void> {
     updatedAt: new Date(),
   };
 
-  const token = generateToken(user);
+  const { accessToken, refreshToken } = issueSessionTokens(user);
 
   // Audit log
   await logAudit(userId, 'CREATE', 'user', userId, { email, name, role: userRole });
@@ -93,7 +105,8 @@ export async function register(req: Request, res: Response): Promise<void> {
         company: user.company,
         role: user.role,
       },
-      token,
+      token: accessToken,
+      refreshToken,
     },
   });
 }
@@ -140,7 +153,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     updatedAt: userRow.updated_at,
   };
 
-  const token = generateToken(user);
+  const { accessToken, refreshToken } = issueSessionTokens(user);
 
   // Audit log
   await logAudit(userRow.id, 'LOGIN', 'user', userRow.id, { email });
@@ -155,7 +168,8 @@ export async function login(req: Request, res: Response): Promise<void> {
         company: user.company,
         role: user.role,
       },
-      token,
+      token: accessToken,
+      refreshToken,
     },
   });
 }
@@ -345,7 +359,7 @@ export async function getUsers(req: Request, res: Response): Promise<void> {
  * Update user (admin only)
  */
 export async function updateUser(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id } = (req.params as Record<string, string>);
   const { role, isActive } = req.body;
 
   const result = await db.query(
@@ -374,23 +388,42 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
  * Refresh token
  */
 export async function refreshToken(req: Request, res: Response): Promise<void> {
-  const user = req.user!;
-  
-  // Create a new token from the existing auth payload
-  const newPayload: AuthPayload = {
-    id: user.id,
-    userId: user.userId,
-    email: user.email,
-    name: user.name,
-    role: user.role,
-    signatureAuthorized: user.signatureAuthorized,
-  };
-  
-  const { accessToken } = generateTokens(newPayload);
+  const { refreshToken: presented } = req.body as { refreshToken?: string };
+  if (!presented) {
+    throw new UnauthorizedError('Invalid refresh token');
+  }
+
+  let userId: string;
+  try {
+    userId = verifyRefreshToken(presented).userId;
+  } catch {
+    throw new UnauthorizedError('Invalid refresh token');
+  }
+
+  const result = await db.query(
+    `SELECT id, email, name, organization, role
+     FROM users WHERE id = $1 AND is_active = true`,
+    [userId]
+  );
+
+  if (result.rows.length === 0) {
+    throw new UnauthorizedError('Invalid refresh token');
+  }
+
+  const row = result.rows[0];
+  const { accessToken, refreshToken: nextRefresh } = issueSessionTokens({
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    company: row.organization,
+    role: row.role,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
 
   res.json({
     success: true,
-    data: { token: accessToken },
+    data: { token: accessToken, refreshToken: nextRefresh },
   });
 }
 

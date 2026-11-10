@@ -276,6 +276,46 @@ describe('File Controller', () => {
       expect(res.status).toHaveBeenCalledWith(201);
     });
 
+    it('should import activities by remapping a stored workbook', async () => {
+      const mockClient = {
+        query: jest.fn().mockResolvedValue({ rows: [{ id: 'a-1', name: 'Activity' }], rowCount: 1 }),
+      };
+      (mockDb.transaction as jest.Mock).mockImplementation(async (cb) => cb(mockClient));
+      (mockDb.query as jest.Mock)
+        .mockResolvedValueOnce({ rows: [{ id: 'file-1', project_id: 'p-1', stored_name: 'book.xlsx' }] })
+        .mockResolvedValue({ rows: [], rowCount: 1 });
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+
+      const req = mockRequest({
+        params: { id: 'file-1' },
+        body: {
+          activities: [],
+          mappings: {
+            Name: 'Name',
+            Scope: 'Scope',
+            Quantity: 'Quantity',
+            Unit: 'Unit',
+            'Activity Type': 'Activity Type',
+          },
+        },
+      });
+      const res = mockResponse();
+
+      await importExcelActivities(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(201);
+    });
+
+    it('should reject a missing workbook when mappings are provided', async () => {
+      (mockDb.query as jest.Mock).mockResolvedValueOnce({ rows: [] });
+      const req = mockRequest({
+        params: { id: 'missing' },
+        body: { activities: [], mappings: { Name: 'Name' } },
+      });
+
+      await expect(importExcelActivities(req, mockResponse())).rejects.toThrow(/not found/i);
+    });
+
     it('should reject empty activities array', async () => {
       const req = mockRequest({ params: { projectId: 'p-1' }, body: { activities: [] } });
       const res = mockResponse();

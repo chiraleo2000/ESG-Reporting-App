@@ -244,6 +244,77 @@ export async function parseExcelActivities(req: Request, res: Response): Promise
   });
 }
 
+function remapImportedRow(row: Record<string, unknown>, mappings: Record<string, string>, rowNumber: number) {
+  const remapped: Record<string, unknown> = { ...row };
+  for (const [target, source] of Object.entries(mappings)) {
+    if (source && row[source] !== undefined) remapped[target] = row[source];
+  }
+  try {
+    return parseActivityRow(remapped, rowNumber);
+  } catch (error: any) {
+    throw new BadRequestError(error.message);
+  }
+}
+
+async function activitiesFromWorkbook(fileId: string, mappings: Record<string, string>, projectId?: string) {
+  const fileResult = await db.query(`SELECT * FROM files WHERE id = $1`, [fileId]);
+  if (fileResult.rows.length === 0) throw new NotFoundError('File not found');
+  const file = fileResult.rows[0];
+  const resolvedProjectId = projectId || file.project_id;
+  const filePath = path.join(UPLOAD_DIR, file.project_id, file.stored_name);
+  if (!fs.existsSync(filePath)) throw new NotFoundError('File not found on disk');
+  const workbook = XLSX.readFile(filePath);
+  const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(worksheet) as Record<string, unknown>[];
+  return {
+    projectId: resolvedProjectId,
+    activities: rows.map((row, index) => remapImportedRow(row, mappings, index + 2)),
+  };
+}
+
+function activityInsertValues(activity: any, activityId: string, projectId: string) {
+  return [
+    activityId,
+    projectId,
+    activity.name,
+    activity.description || null,
+    activity.scope,
+    activity.scope3Category || null,
+    activity.activityType,
+    activity.quantity,
+    activity.unit,
+    activity.source || null,
+    activity.tierLevel || 'tier1',
+    activity.tierDirection || 'both',
+    activity.dataSource || 'excel_import',
+    activity.dataQualityScore || null,
+  ];
+}
+
+async function insertImportedActivities(client: { query: (...args: any[]) => Promise<any> }, activities: any[], projectId: string) {
+  const createdActivities: any[] = [];
+  const errors: any[] = [];
+  for (let i = 0; i < activities.length; i++) {
+    const activity = activities[i];
+    try {
+      const result = await client.query(
+        `INSERT INTO activities (
+          id, project_id, name, description, scope, scope3_category,
+          activity_type, quantity, unit, source, tier_level, tier_direction,
+          data_source, data_quality_score
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        RETURNING id, name`,
+        activityInsertValues(activity, generateId(), projectId)
+      );
+      createdActivities.push(result.rows[0]);
+    } catch (error: any) {
+      errors.push({ index: i, name: activity.name, error: error.message });
+    }
+  }
+  return { createdActivities, errors };
+}
+
 /**
  * Import activities from parsed Excel data
  */
@@ -254,34 +325,9 @@ export async function importExcelActivities(req: Request, res: Response): Promis
 
   if ((!Array.isArray(activities) || activities.length === 0) && req.body.mappings) {
     const fileId = (req.params as Record<string, string>).id || (req.params as Record<string, string>).fileId || req.body.fileId;
-    const fileResult = await db.query(`SELECT * FROM files WHERE id = $1`, [fileId]);
-    if (fileResult.rows.length === 0) {
-      throw new NotFoundError('File not found');
-    }
-    const file = fileResult.rows[0];
-    projectId = projectId || file.project_id;
-    const filePath = path.join(UPLOAD_DIR, file.project_id, file.stored_name);
-    if (!fs.existsSync(filePath)) {
-      throw new NotFoundError('File not found on disk');
-    }
-    const workbook = XLSX.readFile(filePath);
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(worksheet) as Record<string, unknown>[];
-    const mappings = req.body.mappings as Record<string, string>;
-    activities = [];
-    for (let i = 0; i < rows.length; i++) {
-      const remapped: Record<string, unknown> = { ...rows[i] };
-      for (const [target, source] of Object.entries(mappings)) {
-        if (source && rows[i][source] !== undefined) {
-          remapped[target] = rows[i][source];
-        }
-      }
-      try {
-        activities.push(parseActivityRow(remapped, i + 2));
-      } catch (error: any) {
-        throw new BadRequestError(error.message);
-      }
-    }
+    const loaded = await activitiesFromWorkbook(fileId, req.body.mappings as Record<string, string>, projectId);
+    projectId = loaded.projectId;
+    activities = loaded.activities;
   }
 
   if (!projectId) {
@@ -292,44 +338,8 @@ export async function importExcelActivities(req: Request, res: Response): Promis
     throw new BadRequestError('Activities array is required');
   }
 
-  const createdActivities: any[] = [];
-  const errors: any[] = [];
-
-  await db.transaction(async (client) => {
-    for (let i = 0; i < activities.length; i++) {
-      const activity = activities[i];
-      try {
-        const activityId = generateId();
-        const result = await client.query(
-          `INSERT INTO activities (
-            id, project_id, name, description, scope, scope3_category,
-            activity_type, quantity, unit, source, tier_level, tier_direction,
-            data_source, data_quality_score
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-          RETURNING id, name`,
-          [
-            activityId,
-            projectId,
-            activity.name,
-            activity.description || null,
-            activity.scope,
-            activity.scope3Category || null,
-            activity.activityType,
-            activity.quantity,
-            activity.unit,
-            activity.source || null,
-            activity.tierLevel || 'tier1',
-            activity.tierDirection || 'both',
-            activity.dataSource || 'excel_import',
-            activity.dataQualityScore || null,
-          ]
-        );
-        createdActivities.push(result.rows[0]);
-      } catch (error: any) {
-        errors.push({ index: i, name: activity.name, error: error.message });
-      }
-    }
+  const { createdActivities, errors } = await db.transaction(async (client) => {
+    return insertImportedActivities(client, activities, projectId);
   });
 
   await logAudit(userId, 'IMPORT', 'activity', null, { count: createdActivities.length, source: 'excel' }, projectId);

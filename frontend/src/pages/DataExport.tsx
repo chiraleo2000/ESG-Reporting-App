@@ -32,6 +32,51 @@ const item = {
   show: { opacity: 1, y: 0 },
 };
 
+function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function exportReportFile(projectId: string, format: string): Promise<string | null> {
+  const res = await reportsApi.getByProject(projectId);
+  const data = res.data as { reports?: Array<{ id: string }> } | Array<{ id: string }> | undefined;
+  const reports = Array.isArray(data) ? data : data?.reports || [];
+  if (!res.success || reports.length === 0) {
+    return res.error || 'This project has no report to download.';
+  }
+  const download = await reportsApi.download(reports[0].id, format === 'pdf' ? 'pdf' : format);
+  if (!download.ok) return 'Report download failed.';
+  saveBlob(await download.blob(), `report-${reports[0].id}.${format}`);
+  return null;
+}
+
+async function exportActivityFile(projectId: string, format: string): Promise<string | null> {
+  const fileFormat = format === 'xlsx' ? 'xlsx' : 'csv';
+  const download = await activitiesApi.export(projectId, fileFormat);
+  if (!download.ok) return 'Activity export failed.';
+  saveBlob(await download.blob(), `activities.${fileFormat}`);
+  return null;
+}
+
+async function runSelectedExports(types: string[], projectId: string, format: string): Promise<string> {
+  if (types.includes('reports')) {
+    const message = await exportReportFile(projectId, format);
+    if (message) return message;
+  }
+  if (types.includes('activities')) {
+    const message = await exportActivityFile(projectId, format);
+    if (message) return message;
+  }
+  if (!types.includes('reports') && !types.includes('activities')) {
+    return 'Choose activities or reports. Other export types are not available.';
+  }
+  return 'Download started.';
+}
+
 // Export options
 const exportOptions = [
   {
@@ -160,51 +205,12 @@ export const DataExport: React.FC = () => {
     setExporting(true);
     setExportResult(null);
     try {
-      // For report type, attempt real download
       if (selectedProject === 'all') {
         setExportResult('Choose one project before exporting.');
         return;
       }
-      if (selectedTypes.includes('reports')) {
-        const res = await reportsApi.getByProject(selectedProject);
-        const data = res.data as { reports?: Array<{ id: string }> } | Array<{ id: string }> | undefined;
-        const reports = Array.isArray(data) ? data : data?.reports || [];
-        if (!res.success || reports.length === 0) {
-          setExportResult(res.error || 'This project has no report to download.');
-          return;
-        }
-        const download = await reportsApi.download(reports[0].id, selectedFormat === 'pdf' ? 'pdf' : selectedFormat);
-        if (!download.ok) {
-          setExportResult('Report download failed.');
-          return;
-        }
-        const blob = await download.blob();
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `report-${reports[0].id}.${selectedFormat}`;
-        link.click();
-        URL.revokeObjectURL(url);
-      }
-      if (selectedTypes.includes('activities')) {
-        const download = await activitiesApi.export(selectedProject, selectedFormat === 'xlsx' ? 'xlsx' : 'csv');
-        if (!download.ok) {
-          setExportResult('Activity export failed.');
-          return;
-        }
-        const blob = await download.blob();
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `activities.${selectedFormat === 'xlsx' ? 'xlsx' : 'csv'}`;
-        link.click();
-        URL.revokeObjectURL(url);
-      }
-      if (!selectedTypes.includes('reports') && !selectedTypes.includes('activities')) {
-        setExportResult('Choose activities or reports. Other export types are not available.');
-        return;
-      }
-      setExportResult('Download started.');
+      const message = await runSelectedExports(selectedTypes, selectedProject, selectedFormat);
+      setExportResult(message);
     } catch (err) {
       setExportResult(err instanceof Error ? err.message : 'Export failed.');
     } finally {

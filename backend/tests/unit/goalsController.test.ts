@@ -699,6 +699,37 @@ describe('ESG Goals Controller', () => {
       });
     });
 
+    it('should score percentage targets and keep the current status when progress is zero', async () => {
+      mockRequest.params = { projectId: 'proj-1' };
+      (mockDb.query as jest.Mock)
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'goal-pct', name: 'Percent', scope: 'scope2',
+            target_unit: 'kgCO2e', baseline_value: '100', target_value: '50',
+            target_type: 'percentage', status: 'active',
+          }, {
+            id: 'goal-flat', name: 'Flat', scope: 'all',
+            target_unit: 'kgCO2e', baseline_value: '100', target_value: '50',
+            target_type: 'percentage', status: 'active',
+          }],
+          rowCount: 2,
+        })
+        .mockResolvedValueOnce({ rows: [{ total: '95' }], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [{ total: '100' }], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+
+      await bulkUpdateProgress(mockRequest as Request, mockResponse as Response);
+
+      expect(mockResponse.json).toHaveBeenCalledWith({
+        success: true,
+        data: expect.objectContaining({
+          summary: expect.objectContaining({ updated: 2, failed: 0 }),
+        }),
+      });
+    });
+
     it('should skip cancelled and achieved goals', async () => {
       mockRequest.params = { projectId: 'proj-1' };
 

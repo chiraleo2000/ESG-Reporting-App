@@ -10,6 +10,7 @@ import {
   UserRound,
   type LucideIcon,
 } from 'lucide-react';
+import { useAppStore } from '@/store/appStore';
 
 interface SubTab {
   name: string;
@@ -107,15 +108,27 @@ function tabIsActive(tab: MainTab, pathname: string) {
 export const MainNav: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const activeIndex = Math.max(0, mainTabs.findIndex((tab) => tabIsActive(tab, location.pathname)));
-  const active = mainTabs[activeIndex];
+  const userRole = useAppStore((state) => state.user?.role?.toLowerCase());
+  const accountChildren: SubTab[] = [
+    { name: 'Profile', path: '/settings' },
+    { name: 'Audit', path: '/audit-log' },
+    { name: 'Help', path: '/help' },
+  ];
+  if (userRole === 'owner' || userRole === 'admin') {
+    accountChildren.splice(1, 0, { name: 'Security', path: '/security' });
+  }
+  const tabs = mainTabs.map((tab) =>
+    tab.id === 'account' ? { ...tab, match: [...tab.match, '/security'], children: accountChildren } : tab
+  );
+  const activeIndex = Math.max(0, tabs.findIndex((tab) => tabIsActive(tab, location.pathname)));
+  const active = tabs[activeIndex];
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
     event.preventDefault();
     const direction = event.key === 'ArrowRight' ? 1 : -1;
-    const next = (activeIndex + direction + mainTabs.length) % mainTabs.length;
-    navigate(mainTabs[next].path);
+    const next = (activeIndex + direction + tabs.length) % tabs.length;
+    navigate(tabs[next].path);
     const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]');
     buttons[next]?.focus();
   };
@@ -130,7 +143,7 @@ export const MainNav: React.FC = () => {
         className="flex gap-1 overflow-x-auto px-3 py-2"
         onKeyDown={onKeyDown}
       >
-        {mainTabs.map((tab, index) => {
+        {tabs.map((tab, index) => {
           const Icon = tab.icon;
           const selected = index === activeIndex;
           return (
@@ -180,24 +193,29 @@ export const MainNav: React.FC = () => {
   );
 };
 
+const ROUTE_PURPOSES: ReadonlyArray<readonly [string, string]> = [
+  ['/projects', 'Open a reporting project, or create one, before you enter activity data.'],
+  ['/activities', 'Record the fuel, energy, and value-chain activities that feed the calculation.'],
+  ['/emission-factors', 'Look up the factors used to turn activity data into emissions.'],
+  ['/calculations/history', 'Review carbon footprint results already saved for this project.'],
+  ['/calculations', 'Run a calculation for the current project and inspect the method.'],
+  ['/reports', 'Generate a compliance report and download or delete it.'],
+  ['/goals', 'Track emission targets and how close the project is to them.'],
+  ['/signatures', 'Sign a completed report or check that an existing signature is valid.'],
+  ['/analytics/trends', 'See how emissions move across reporting periods.'],
+  ['/analytics/benchmarks', 'Compare this project with the benchmark values already in the app.'],
+  ['/analytics', 'Read the emissions overview for the current project.'],
+  ['/connect', 'Connect a website, file server, or spreadsheet, then test it before you save.'],
+  ['/import', 'Upload a workbook, check the rows, and create activities from it.'],
+  ['/export', 'Download activities or a generated report for the current project.'],
+  ['/security', 'Review platform security alerts and resolve incidents.'],
+  ['/audit-log', 'See who changed this project and when.'],
+  ['/help', 'A short guide to the seven main tabs.'],
+  ['/settings', 'Update your profile and password.'],
+  ['/ai-assistant', 'Demo replies only. This assistant is not connected to a model.'],
+];
+
 export function routePurpose(pathname: string): string {
-  if (pathname.startsWith('/projects')) return 'Open a reporting project, or create one, before you enter activity data.';
-  if (pathname.startsWith('/activities')) return 'Record the fuel, energy, and value-chain activities that feed the calculation.';
-  if (pathname.startsWith('/emission-factors')) return 'Look up the factors used to turn activity data into emissions.';
-  if (pathname.startsWith('/calculations/history')) return 'Review carbon footprint results already saved for this project.';
-  if (pathname.startsWith('/calculations')) return 'Run a calculation for the current project and inspect the method.';
-  if (pathname.startsWith('/reports')) return 'Generate a compliance report and download or delete it.';
-  if (pathname.startsWith('/goals')) return 'Track emission targets and how close the project is to them.';
-  if (pathname.startsWith('/signatures')) return 'Sign a completed report or check that an existing signature is valid.';
-  if (pathname.startsWith('/analytics/trends')) return 'See how emissions move across reporting periods.';
-  if (pathname.startsWith('/analytics/benchmarks')) return 'Compare this project with the benchmark values already in the app.';
-  if (pathname.startsWith('/analytics')) return 'Read the emissions overview for the current project.';
-  if (pathname.startsWith('/connect')) return 'Connect a website, file server, or spreadsheet, then test it before you save.';
-  if (pathname.startsWith('/import')) return 'Upload a workbook, check the rows, and create activities from it.';
-  if (pathname.startsWith('/export')) return 'Download activities or a generated report for the current project.';
-  if (pathname.startsWith('/audit-log')) return 'See who changed this project and when.';
-  if (pathname.startsWith('/help')) return 'A short guide to the seven main tabs.';
-  if (pathname.startsWith('/settings')) return 'Update your profile and password.';
-  if (pathname.startsWith('/ai-assistant')) return 'Demo replies only. This assistant is not connected to a model.';
-  return 'Emissions, reports, and connections for the project selected in the header.';
+  const match = ROUTE_PURPOSES.find(([prefix]) => pathname.startsWith(prefix));
+  return match ? match[1] : 'Emissions, reports, and connections for the project selected in the header.';
 }

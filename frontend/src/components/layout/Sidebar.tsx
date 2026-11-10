@@ -107,6 +107,8 @@ const analyticsNavItems: NavItem[] = [
   { name: 'AI Insights', path: '/analytics/ai', icon: Brain, badge: 'Beta' },
 ];
 
+const ownerSecurityNavItem: NavItem = { name: 'Security', path: '/security', icon: Lock };
+
 const toolsNavItems: NavItem[] = [
   { name: 'Emission Factors', path: '/emission-factors', icon: Database },
   { name: 'Digital Signatures', path: '/signatures', icon: FileSignature },
@@ -129,6 +131,9 @@ export const Sidebar: React.FC = () => {
   const { user } = useAppStore();
   const location = useLocation();
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
+  const globalRole = user?.role?.toLowerCase();
+  const showOwnerSecurity = globalRole === 'owner' || globalRole === 'admin';
+  const toolsItems = showOwnerSecurity ? [...toolsNavItems, ownerSecurityNavItem] : toolsNavItems;
 
   const isActive = (path: string) => {
     if (path === '/dashboard') return location.pathname === '/dashboard' || location.pathname === '/';
@@ -325,7 +330,7 @@ export const Sidebar: React.FC = () => {
               Tools
             </p>
           )}
-          {toolsNavItems.map((item) => (
+          {toolsItems.map((item) => (
             <NavItemComponent key={item.path} item={item} />
           ))}
         </div>

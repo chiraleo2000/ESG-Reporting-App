@@ -189,15 +189,21 @@ export async function getProjects(req: Request, res: Response): Promise<void> {
 export async function getProject(req: Request, res: Response): Promise<void> {
   const { id } = (req.params as Record<string, string>);
 
-  // Project is already loaded by middleware
-  const project = (req as any).project;
+  const projectResult = await db.query(
+    `SELECT * FROM projects WHERE id = $1 AND status != 'archived'`,
+    [id]
+  );
+  if (projectResult.rows.length === 0) {
+    throw new NotFoundError('Project not found');
+  }
+  const project = projectResult.rows[0];
 
   // Get project members
   const membersResult = await db.query(
     `SELECT u.id, u.email, u.name, pm.role
      FROM project_members pm
      JOIN users u ON pm.user_id = u.id
-     WHERE pm.project_id = $1`,
+     WHERE pm.project_id = $1 AND pm.is_active = true`,
     [id]
   );
 
@@ -363,16 +369,53 @@ export async function deleteProject(req: Request, res: Response): Promise<void> 
 }
 
 /**
+ * List project members
+ */
+export async function getProjectMembers(req: Request, res: Response): Promise<void> {
+  const { id } = (req.params as Record<string, string>);
+
+  const membersResult = await db.query(
+    `SELECT u.id, u.email, u.name, pm.role, pm.invited_at, pm.accepted_at, pm.is_active
+     FROM project_members pm
+     JOIN users u ON pm.user_id = u.id
+     WHERE pm.project_id = $1 AND pm.is_active = true
+     ORDER BY
+       CASE pm.role
+         WHEN 'owner' THEN 1 WHEN 'admin' THEN 1 WHEN 'director' THEN 2
+         WHEN 'editor' THEN 3 WHEN 'auditor' THEN 4 ELSE 5
+       END,
+       u.name`,
+    [id]
+  );
+
+  res.json({
+    success: true,
+    data: membersResult.rows.map((row) => ({
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      role: row.role,
+      invitedAt: row.invited_at,
+      acceptedAt: row.accepted_at,
+    })),
+  });
+}
+
+/**
  * Add a member to a project
  */
 export async function addProjectMember(req: Request, res: Response): Promise<void> {
   const { id } = (req.params as Record<string, string>);
   const { email, role } = req.body;
   const userId = req.user!.id;
+  const memberRole = role || 'viewer';
 
-  // Find user by email
+  if (memberRole === 'owner' || memberRole === 'admin') {
+    throw new BadRequestError('Cannot invite as owner; transfer ownership separately');
+  }
+
   const userResult = await db.query(
-    `SELECT id, email, name FROM users WHERE email = $1`,
+    `SELECT id, email, name FROM users WHERE email = $1 AND is_active = true`,
     [email]
   );
 
@@ -382,24 +425,30 @@ export async function addProjectMember(req: Request, res: Response): Promise<voi
 
   const newMember = userResult.rows[0];
 
-  // Check if already a member
   const existingMember = await db.query(
-    `SELECT id FROM project_members WHERE project_id = $1 AND user_id = $2`,
+    `SELECT id, is_active FROM project_members WHERE project_id = $1 AND user_id = $2`,
     [id, newMember.id]
   );
 
-  if (existingMember.rows.length > 0) {
+  if (existingMember.rows.length > 0 && existingMember.rows[0].is_active) {
     throw new BadRequestError('User is already a member of this project');
   }
 
-  // Add member
-  await db.query(
-    `INSERT INTO project_members (id, project_id, user_id, role)
-     VALUES ($1, $2, $3, $4)`,
-    [generateId(), id, newMember.id, role || 'viewer']
-  );
+  if (existingMember.rows.length > 0) {
+    await db.query(
+      `UPDATE project_members SET role = $1, is_active = true, invited_by = $2, invited_at = NOW(), updated_at = NOW()
+       WHERE project_id = $3 AND user_id = $4`,
+      [memberRole, userId, id, newMember.id]
+    );
+  } else {
+    await db.query(
+      `INSERT INTO project_members (id, project_id, user_id, role, invited_by, accepted_at, is_active)
+       VALUES ($1, $2, $3, $4, $5, NOW(), true)`,
+      [generateId(), id, newMember.id, memberRole, userId]
+    );
+  }
 
-  await logAudit(userId, 'ADD_MEMBER', 'project', id, { memberId: newMember.id, role }, id);
+  await logAudit(userId, 'member.invite' as AuditAction, 'project', id, { memberId: newMember.id, role: memberRole }, id);
 
   res.status(201).json({
     success: true,
@@ -407,7 +456,7 @@ export async function addProjectMember(req: Request, res: Response): Promise<voi
       id: newMember.id,
       email: newMember.email,
       name: newMember.name,
-      role: role || 'viewer',
+      role: memberRole,
     },
   });
 }
@@ -420,9 +469,12 @@ export async function updateProjectMember(req: Request, res: Response): Promise<
   const { role } = req.body;
   const userId = req.user!.id;
 
-  // Cannot change owner role
+  if (role === 'owner' || role === 'admin') {
+    throw new BadRequestError('Cannot promote to owner via this endpoint');
+  }
+
   const existingMember = await db.query(
-    `SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2`,
+    `SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2 AND is_active = true`,
     [id, memberId]
   );
 
@@ -430,12 +482,12 @@ export async function updateProjectMember(req: Request, res: Response): Promise<
     throw new NotFoundError('Member not found');
   }
 
-  if (existingMember.rows[0].role === 'owner') {
+  if (existingMember.rows[0].role === 'owner' || existingMember.rows[0].role === 'admin') {
     throw new BadRequestError('Cannot change owner role');
   }
 
   await db.query(
-    `UPDATE project_members SET role = $1 WHERE project_id = $2 AND user_id = $3`,
+    `UPDATE project_members SET role = $1, updated_at = NOW() WHERE project_id = $2 AND user_id = $3`,
     [role, id, memberId]
   );
 
@@ -454,9 +506,8 @@ export async function removeProjectMember(req: Request, res: Response): Promise<
   const { id, memberId } = (req.params as Record<string, string>);
   const userId = req.user!.id;
 
-  // Cannot remove owner
   const existingMember = await db.query(
-    `SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2`,
+    `SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2 AND is_active = true`,
     [id, memberId]
   );
 
@@ -464,12 +515,20 @@ export async function removeProjectMember(req: Request, res: Response): Promise<
     throw new NotFoundError('Member not found');
   }
 
-  if (existingMember.rows[0].role === 'owner') {
-    throw new BadRequestError('Cannot remove project owner');
+  if (existingMember.rows[0].role === 'owner' || existingMember.rows[0].role === 'admin') {
+    const ownerCount = await db.query(
+      `SELECT COUNT(*)::int AS count FROM project_members
+       WHERE project_id = $1 AND is_active = true AND role IN ('owner', 'admin')`,
+      [id]
+    );
+    if (ownerCount.rows[0].count <= 1) {
+      throw new BadRequestError('Cannot remove the last project owner');
+    }
   }
 
   await db.query(
-    `DELETE FROM project_members WHERE project_id = $1 AND user_id = $2`,
+    `UPDATE project_members SET is_active = false, updated_at = NOW()
+     WHERE project_id = $1 AND user_id = $2`,
     [id, memberId]
   );
 

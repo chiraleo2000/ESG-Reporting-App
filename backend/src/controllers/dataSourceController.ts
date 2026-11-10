@@ -38,7 +38,10 @@ export async function createDataSource(req: Request, res: Response): Promise<voi
 
   res.status(201).json({
     success: true,
-    data: dataSource,
+    data: {
+      ...dataSource,
+      config: dataSourceService.redactConfigSecrets(dataSource.config),
+    },
     message: 'Data source created successfully',
   });
 }
@@ -49,13 +52,27 @@ export async function createDataSource(req: Request, res: Response): Promise<voi
  */
 export async function getDataSources(req: Request, res: Response): Promise<void> {
   const { projectId } = (req.params as Record<string, string>);
+  const { page, limit, type, enabled, search, status } = req.query as Record<string, string>;
 
-  const dataSources = await dataSourceService.getDataSources(projectId);
+  const result = await dataSourceService.getDataSources(projectId, {
+    page: page ? Number(page) : undefined,
+    limit: limit ? Number(limit) : undefined,
+    type,
+    enabled: enabled !== undefined ? enabled === 'true' : undefined,
+    search,
+    status,
+  });
 
   res.json({
     success: true,
-    data: dataSources,
-    count: dataSources.length,
+    data: result.items,
+    count: result.items.length,
+    pagination: {
+      page: result.page,
+      limit: result.limit,
+      total: result.total,
+      totalPages: Math.ceil(result.total / result.limit),
+    },
   });
 }
 

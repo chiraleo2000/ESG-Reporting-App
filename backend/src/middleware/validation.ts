@@ -23,7 +23,10 @@ export const validate = (
         throw new ValidationError('Validation failed', errors);
       }
 
-      // Express 5 exposes req.query as a getter, so parsed query stays on the request as-is.
+      // Express 5 defines req.query as a getter with no setter. Assignment throws,
+      // and the getter re-parses the URL on every read, so mutating the object
+      // it returns is discarded. Handlers therefore keep string query values and
+      // apply their own defaults (`page = 1`, `limit = 20` or `50`) via Number().
       if (source === 'body') {
         req.body = result.data;
       } else if (source === 'params') {
@@ -226,11 +229,22 @@ export const signReportSchema = z.object({
 // AUTH VALIDATION SCHEMAS
 // ============================================================================
 
+/** Strong password: min 10 chars, upper, lower, digit, special */
+export const passwordPolicySchema = z
+  .string()
+  .min(10, 'Password must be at least 10 characters')
+  .max(100)
+  .regex(/[a-z]/, 'Password must include a lowercase letter')
+  .regex(/[A-Z]/, 'Password must include an uppercase letter')
+  .regex(/[0-9]/, 'Password must include a digit')
+  .regex(/[^A-Za-z0-9]/, 'Password must include a special character');
+
 export const registerSchema = z.object({
   email: emailSchema,
-  password: z.string().min(6).max(100),
+  password: passwordPolicySchema,
   name: z.string().min(1).max(255),
   company: z.string().max(255).optional(),
+  // Client-supplied role is ignored server-side; kept optional for backwards-compat clients
   role: z.enum(['owner', 'director', 'auditor', 'editor', 'viewer', 'operator']).optional(),
 });
 
@@ -241,4 +255,36 @@ export const loginSchema = z.object({
 
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1),
+});
+
+export const mfaVerifySchema = z.object({
+  mfaToken: z.string().min(1),
+  code: z.string().min(6).max(12),
+});
+
+export const mfaConfirmSchema = z.object({
+  code: z.string().length(6),
+});
+
+export const mfaDisableSchema = z.object({
+  password: z.string().min(1),
+  code: z.string().min(6).max(12),
+});
+
+export const projectMemberSchema = z.object({
+  email: emailSchema,
+  role: z.enum(['director', 'auditor', 'editor', 'viewer']).default('viewer'),
+});
+
+export const updateProjectMemberSchema = z.object({
+  role: z.enum(['director', 'auditor', 'editor', 'viewer']),
+});
+
+export const dataSourceFilterSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  type: z.enum(['rest_api', 'ssh_sftp', 'file_upload']).optional(),
+  enabled: z.coerce.boolean().optional(),
+  search: z.string().optional(),
+  status: z.enum(['pending', 'success', 'error', 'running']).optional(),
 });

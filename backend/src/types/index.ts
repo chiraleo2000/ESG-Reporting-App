@@ -29,6 +29,8 @@ export interface AuthPayload {
   name: string;    // user's name
   role: UserRole;
   signatureAuthorized: boolean;
+  /** Authentication methods references — e.g. ['pwd'] or ['pwd','otp'] */
+  amr?: string[];
 }
 
 // Extended user info returned from authentication (not in JWT)

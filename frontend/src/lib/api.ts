@@ -26,16 +26,69 @@ interface RegisterData {
   role?: string;
 }
 
+interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  company?: string | null;
+  role: string;
+  mfaEnabled?: boolean;
+  mfaRecommended?: boolean;
+}
+
+export type LoginResponse =
+  | {
+      mfaRequired: true;
+      mfaToken: string;
+      user: Pick<AuthUser, 'id' | 'email' | 'name' | 'role'>;
+    }
+  | {
+      mfaRequired?: false;
+      user: AuthUser;
+      token: string;
+      refreshToken?: string;
+    };
+
 interface AuthResponse {
-  user: {
-    id: string;
-    email: string;
-    name: string;
-    company: string | null;
-    role: string;
-  };
+  user: AuthUser;
   token: string;
   refreshToken?: string;
+}
+
+export interface MeProfile extends AuthUser {
+  createdAt?: string;
+  updatedAt?: string;
+  lastLogin?: string;
+}
+
+export interface ProjectMember {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  invitedAt?: string;
+  acceptedAt?: string;
+}
+
+export interface SecurityAlert {
+  id: string;
+  alertType: string;
+  severity: string;
+  title: string;
+  description?: string;
+  userId?: string;
+  projectId?: string;
+  details?: unknown;
+  ipAddress?: string;
+  resolved: boolean;
+  createdAt: string;
+}
+
+export interface SecuritySummary {
+  unresolved: number;
+  bySeverity: Record<string, number>;
+  failedAuthLast24h: number;
+  sensitiveReadsLast24h: number;
 }
 
 interface Activity {
@@ -148,6 +201,50 @@ async function refreshAccessToken(): Promise<string | null> {
   return refreshInFlight;
 }
 
+function linkAbortSignal(controller: AbortController, parentSignal?: AbortSignal | null) {
+  if (!parentSignal) return;
+  if (parentSignal.aborted) {
+    controller.abort();
+    return;
+  }
+  parentSignal.addEventListener('abort', () => controller.abort(), { once: true });
+}
+
+async function readResponseBody(response: Response): Promise<any> {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    return { success: response.ok, message: response.statusText };
+  }
+  return response.json().catch(() => ({}));
+}
+
+function networkErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.name === 'AbortError') return 'Request timed out';
+  if (error instanceof Error) return error.message;
+  return 'Network error occurred';
+}
+
+async function unauthorizedResponse<T>(endpoint: string, options: RequestInit): Promise<ApiResponse<T>> {
+  const nextToken = await refreshAccessToken();
+  if (nextToken) return apiFetch<T>(endpoint, options, 1);
+  clearStoredSession();
+  return { success: false, error: 'Session expired. Please sign in again.' };
+}
+
+async function httpFailure<T>(
+  response: Response,
+  data: { message?: unknown; error?: unknown },
+  isGet: boolean,
+  endpoint: string,
+  options: RequestInit,
+  attempt: number,
+): Promise<ApiResponse<T>> {
+  if (isGet && response.status >= 500 && attempt === 0) {
+    return apiFetch<T>(endpoint, options, attempt + 1);
+  }
+  return { success: false, error: errorText(data, response.status) };
+}
+
 // Base fetch wrapper with auth, timeout, one GET retry, and one 401 refresh
 async function apiFetch<T = any>(
   endpoint: string,
@@ -169,11 +266,7 @@ async function apiFetch<T = any>(
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  const parentSignal = options.signal;
-  if (parentSignal) {
-    if (parentSignal.aborted) controller.abort();
-    else parentSignal.addEventListener('abort', () => controller.abort(), { once: true });
-  }
+  linkAbortSignal(controller, options.signal);
 
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -181,29 +274,14 @@ async function apiFetch<T = any>(
       headers,
       signal: controller.signal,
     });
-
-    const contentType = response.headers.get('content-type') || '';
-    const data = contentType.includes('application/json')
-      ? await response.json().catch(() => ({}))
-      : { success: response.ok, message: response.statusText };
+    const data = await readResponseBody(response);
 
     if (response.status === 401 && attempt === 0 && !endpoint.startsWith('/auth/')) {
-      const nextToken = await refreshAccessToken();
-      if (nextToken) {
-        return apiFetch<T>(endpoint, options, 1);
-      }
-      clearStoredSession();
-      return { success: false, error: 'Session expired. Please sign in again.' };
+      return unauthorizedResponse<T>(endpoint, options);
     }
 
     if (!response.ok) {
-      if (isGet && response.status >= 500 && attempt === 0) {
-        return apiFetch<T>(endpoint, options, attempt + 1);
-      }
-      return {
-        success: false,
-        error: errorText(data, response.status),
-      };
+      return httpFailure<T>(response, data, isGet, endpoint, options, attempt);
     }
 
     return data;
@@ -211,11 +289,7 @@ async function apiFetch<T = any>(
     if (isGet && attempt === 0) {
       return apiFetch<T>(endpoint, options, attempt + 1);
     }
-    const timedOut = error instanceof Error && error.name === 'AbortError';
-    return {
-      success: false,
-      error: timedOut ? 'Request timed out' : error instanceof Error ? error.message : 'Network error occurred',
-    };
+    return { success: false, error: networkErrorMessage(error) };
   } finally {
     clearTimeout(timer);
   }
@@ -233,8 +307,8 @@ async function apiRawFetch(endpoint: string, options: RequestInit = {}): Promise
 
 // Auth API
 export const authApi = {
-  login: async (credentials: LoginCredentials): Promise<ApiResponse<AuthResponse>> => {
-    return apiFetch<AuthResponse>('/auth/login', {
+  login: async (credentials: LoginCredentials): Promise<ApiResponse<LoginResponse>> => {
+    return apiFetch<LoginResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
@@ -247,8 +321,8 @@ export const authApi = {
     });
   },
   
-  getCurrentUser: async (): Promise<ApiResponse<{ user: AuthResponse['user'] }>> => {
-    return apiFetch('/auth/me');
+  getCurrentUser: async (): Promise<ApiResponse<MeProfile>> => {
+    return apiFetch<MeProfile>('/auth/me');
   },
   
   refreshToken: async (refreshToken: string): Promise<ApiResponse<{ token: string; refreshToken?: string }>> => {
@@ -265,6 +339,30 @@ export const authApi = {
     }),
 
   logout: async () => apiFetch('/auth/logout', { method: 'POST' }),
+
+  verifyMfa: async (mfaToken: string, code: string): Promise<ApiResponse<AuthResponse>> =>
+    apiFetch<AuthResponse>('/auth/mfa/verify', {
+      method: 'POST',
+      body: JSON.stringify({ mfaToken, code }),
+    }),
+
+  setupMfa: async (): Promise<ApiResponse<{ secret: string; otpauthUrl: string }>> =>
+    apiFetch('/auth/mfa/setup', { method: 'POST' }),
+
+  confirmMfa: async (code: string): Promise<ApiResponse<{ mfaEnabled: boolean; backupCodes: string[] }>> =>
+    apiFetch('/auth/mfa/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    }),
+
+  disableMfa: async (password: string, code: string) =>
+    apiFetch('/auth/mfa/disable', {
+      method: 'POST',
+      body: JSON.stringify({ password, code }),
+    }),
+
+  regenerateBackupCodes: async (): Promise<ApiResponse<{ backupCodes: string[] }>> =>
+    apiFetch('/auth/mfa/backup-codes', { method: 'POST' }),
 };
 
 // Projects API
@@ -282,6 +380,41 @@ export const projectsApi = {
   delete: async (id: string) => apiFetch(`/projects/${id}`, {
     method: 'DELETE',
   }),
+
+  getMembers: async (projectId: string): Promise<ApiResponse<ProjectMember[]>> =>
+    apiFetch<ProjectMember[]>(`/projects/${projectId}/members`),
+
+  addMember: async (projectId: string, body: { email: string; role: string }) =>
+    apiFetch(`/projects/${projectId}/members`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updateMember: async (projectId: string, memberId: string, body: { role: string }) =>
+    apiFetch(`/projects/${projectId}/members/${memberId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  removeMember: async (projectId: string, memberId: string) =>
+    apiFetch(`/projects/${projectId}/members/${memberId}`, { method: 'DELETE' }),
+};
+
+export const securityApi = {
+  getAlerts: async (params?: { page?: number; limit?: number; resolved?: boolean; severity?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.append('page', String(params.page));
+    if (params?.limit) query.append('limit', String(params.limit));
+    if (params?.resolved !== undefined) query.append('resolved', String(params.resolved));
+    if (params?.severity) query.append('severity', params.severity);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return apiFetch<SecurityAlert[]>(`/security/alerts${qs}`);
+  },
+
+  getSummary: async (): Promise<ApiResponse<SecuritySummary>> => apiFetch<SecuritySummary>('/security/summary'),
+
+  resolveAlert: async (id: string) =>
+    apiFetch(`/security/alerts/${id}/resolve`, { method: 'POST' }),
 };
 
 // Activities API
@@ -582,6 +715,7 @@ export const healthCheck = async (): Promise<boolean> => {
 // Export all APIs
 export default {
   auth: authApi,
+  security: securityApi,
   projects: projectsApi,
   activities: activitiesApi,
   calculations: calculationsApi,

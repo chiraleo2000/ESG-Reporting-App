@@ -7,6 +7,8 @@ config({ path: '.env.test' });
 // Set test environment variables
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-jwt-secret-key-for-unit-testing-32chars';
+process.env.JWT_REFRESH_SECRET = 'test-jwt-refresh-secret-for-unit-testing-32';
+process.env.MFA_ENCRYPTION_KEY = 'test-mfa-encryption-key-32chars!!';
 process.env.DATABASE_URL = 'postgresql://postgres:postgres123@localhost:5434/esg_reporting';
 process.env.REDIS_URL = 'redis://localhost:6379';
 

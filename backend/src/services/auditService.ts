@@ -1,10 +1,51 @@
 import { db } from '../config/database';
 import { cacheGet, cacheSet, cacheDel } from '../config/redis';
 import { logger } from '../utils/logger';
+import { generateId } from '../utils/helpers';
 
 // 7-year retention period in days
 const RETENTION_DAYS = 2555;
 const CACHE_TTL = 300; // 5 minutes
+
+export interface SecurityEventInput {
+  userId?: string | null;
+  projectId?: string | null;
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  details?: Record<string, any>;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+/**
+ * Unified security / audit write — always captures IP and user-agent when provided
+ */
+export async function logSecurityEvent(event: SecurityEventInput): Promise<string> {
+  const id = generateId();
+  try {
+    await db.query(
+      `INSERT INTO audit_logs (
+        id, project_id, user_id, action, entity_type, entity_id,
+        details, ip_address, user_agent, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
+      [
+        id,
+        event.projectId || null,
+        event.userId || null,
+        event.action,
+        event.entityType,
+        event.entityId || null,
+        JSON.stringify(event.details || {}),
+        event.ipAddress || null,
+        event.userAgent || null,
+      ]
+    );
+  } catch (error) {
+    logger.error('Failed to write security event:', error);
+  }
+  return id;
+}
 
 /**
  * Create an audit log entry
@@ -16,29 +57,19 @@ export async function createAuditLog(
   entityType: string,
   entityId: string,
   details: Record<string, any>,
-  ipAddress?: string
+  ipAddress?: string,
+  userAgent?: string
 ): Promise<string> {
-  const result = await db.query(
-    `INSERT INTO audit_logs (
-      project_id, user_id, action, entity_type, entity_id, 
-      details, ip_address, created_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-    RETURNING id`,
-    [projectId, userId, action, entityType, entityId, JSON.stringify(details), ipAddress]
-  );
-
-  // Invalidate cache
-  await cacheDel(`audit:project:${projectId}:*`);
-
-  logger.info('Audit log created', {
-    auditId: result.rows[0].id,
+  return logSecurityEvent({
     projectId,
+    userId,
     action,
     entityType,
     entityId,
+    details,
+    ipAddress,
+    userAgent,
   });
-
-  return result.rows[0].id;
 }
 
 /**

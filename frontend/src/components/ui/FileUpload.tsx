@@ -65,7 +65,46 @@ const formatFileSize = (bytes: number): string => {
 };
 
 // Generate unique ID
-const generateId = () => Math.random().toString(36).substr(2, 9);
+const generateId = () => crypto.randomUUID();
+
+function fileItemFromSelection(file: File, maxSize: number): FileItem {
+  if (file.size > maxSize * 1024 * 1024) {
+    return {
+      id: generateId(),
+      file,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      status: 'error',
+      progress: 0,
+      error: `File exceeds ${maxSize}MB limit`,
+    };
+  }
+  const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
+  return {
+    id: generateId(),
+    file,
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    preview,
+    status: 'uploading',
+    progress: 0,
+  };
+}
+
+async function animateUpload(
+  fileItem: FileItem,
+  setFiles: React.Dispatch<React.SetStateAction<FileItem[]>>
+) {
+  for (let progress = 0; progress <= 100; progress += 10) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    setFiles((prev) => prev.map((f) => (f.id === fileItem.id ? { ...f, progress } : f)));
+  }
+  setFiles((prev) =>
+    prev.map((f) => (f.id === fileItem.id ? { ...f, status: 'success', progress: 100 } : f))
+  );
+}
 
 export const FileUpload: React.FC<FileUploadProps> = ({
   onUpload,
@@ -87,79 +126,21 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       if (!selectedFiles) return;
 
       const newFiles: FileItem[] = [];
-
       for (let i = 0; i < selectedFiles.length; i++) {
-        if (files.length + newFiles.length >= maxFiles) {
-          break;
-        }
-
-        const file = selectedFiles[i];
-
-        // Validate file size
-        if (file.size > maxSize * 1024 * 1024) {
-          newFiles.push({
-            id: generateId(),
-            file,
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            status: 'error',
-            progress: 0,
-            error: `File exceeds ${maxSize}MB limit`,
-          });
-          continue;
-        }
-
-        // Create preview for images
-        let preview: string | undefined;
-        if (file.type.startsWith('image/')) {
-          preview = URL.createObjectURL(file);
-        }
-
-        newFiles.push({
-          id: generateId(),
-          file,
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          preview,
-          status: 'uploading',
-          progress: 0,
-        });
+        if (files.length + newFiles.length >= maxFiles) break;
+        newFiles.push(fileItemFromSelection(selectedFiles[i], maxSize));
       }
 
       setFiles((prev) => [...prev, ...newFiles]);
 
-      // Simulate upload with progress
       for (const fileItem of newFiles) {
         if (fileItem.status === 'error') continue;
-
-        // Simulate progress
-        for (let progress = 0; progress <= 100; progress += 10) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          setFiles((prev) =>
-            prev.map((f) =>
-              f.id === fileItem.id ? { ...f, progress } : f
-            )
-          );
-        }
-
-        // Mark as success
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.id === fileItem.id ? { ...f, status: 'success', progress: 100 } : f
-          )
-        );
+        await animateUpload(fileItem, setFiles);
       }
 
-      // Call onUpload callback
       if (onUpload) {
-        const validFiles = newFiles
-          .filter((f) => f.status !== 'error')
-          .map((f) => f.file);
-        if (validFiles.length > 0) {
-          await onUpload(validFiles);
-        }
+        const validFiles = newFiles.filter((f) => f.status !== 'error').map((f) => f.file);
+        if (validFiles.length > 0) await onUpload(validFiles);
       }
     },
     [files.length, maxFiles, maxSize, onUpload]

@@ -110,6 +110,134 @@ interface DashboardData {
   recentActivities: Array<any>;
 }
 
+type ProjectBucket = {
+  scope1: number;
+  scope2: number;
+  scope3: number;
+  activityCount: number;
+  calculatedCount: number;
+  scope3Categories: Record<string, number>;
+  recent: any[];
+};
+
+function orZero(value: unknown): number {
+  return (value as number) || 0;
+}
+
+function trendChange(value: number, delta: number): number {
+  return value > 0 ? delta : 0;
+}
+
+function mergeCategories(target: Record<string, number>, categories?: Record<string, number>) {
+  if (!categories) return;
+  for (const [cat, val] of Object.entries(categories)) {
+    target[cat] = (target[cat] || 0) + val;
+  }
+}
+
+function recentFromActivities(activityData: any[], projectName: string) {
+  return activityData.slice(0, 3).map((activity: any) => ({
+    id: activity.id,
+    type: activity.activityType?.replace(/_/g, ' ') || 'Activity',
+    amount: `${activity.quantity?.toLocaleString() || 0} ${activity.unit || ''}`,
+    date: new Date(activity.createdAt).toLocaleDateString(),
+    scope: activity.scope,
+    status: activity.calculationStatus || 'pending',
+    emissions: orZero(activity.totalEmissionsKgCo2e) / 1000,
+    projectName,
+  }));
+}
+
+async function addProjectMetrics(project: any, bucket: ProjectBucket) {
+  try {
+    const totalsResponse = await calculationsApi.getTotals(project.id);
+    if (totalsResponse.success && totalsResponse.data) {
+      const totals = totalsResponse.data as any;
+      bucket.scope1 += orZero(totals.scope1);
+      bucket.scope2 += orZero(totals.scope2);
+      bucket.scope3 += orZero(totals.scope3);
+      bucket.activityCount += orZero(totals.activityCount);
+      bucket.calculatedCount += orZero(totals.calculatedCount);
+      mergeCategories(bucket.scope3Categories, totals.scope3Categories);
+    }
+  } catch {
+    return;
+  }
+  try {
+    const activitiesResponse = await activitiesApi.getByProject(project.id);
+    if (activitiesResponse.success && activitiesResponse.data) {
+      bucket.recent.push(...recentFromActivities(activitiesResponse.data as any[], project.name));
+    }
+  } catch {
+    // Keep totals already applied when activity loading fails.
+  }
+}
+
+function DashboardHeader({
+  userName,
+  isLive,
+  loading,
+  selectedYear,
+  onYearChange,
+  onToggleLive,
+  onRefresh,
+  onGenerateReport,
+}: Readonly<{
+  userName?: string;
+  isLive: boolean;
+  loading: boolean;
+  selectedYear: string;
+  onYearChange: (year: string) => void;
+  onToggleLive: () => void;
+  onRefresh: () => void;
+  onGenerateReport: () => void;
+}>) {
+  const liveLabel = isLive ? 'Live' : 'Paused';
+  return (
+    <motion.div variants={item} className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-earth-800 dark:text-earth-100">Dashboard</h1>
+          <Badge variant={isLive ? 'grass' : 'default'} className="animate-pulse">
+            <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-grass-500' : 'bg-earth-400'} mr-1`} />
+            {liveLabel}
+          </Badge>
+        </div>
+        <p className="text-earth-500 dark:text-earth-400 mt-1 text-lg">
+          Welcome back, {userName || 'User'}. Real-time overview of your carbon footprint.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <select
+          value={selectedYear}
+          onChange={(e) => onYearChange(e.target.value)}
+          className="px-4 py-2 rounded-xl border border-earth-200 dark:border-earth-600
+                   bg-white dark:bg-earth-800 text-earth-700 dark:text-earth-200
+                   focus:ring-2 focus:ring-grass-500 cursor-pointer"
+        >
+          <option value="2024">2024</option>
+          <option value="2023">2023</option>
+          <option value="2022">2022</option>
+        </select>
+        <Button variant={isLive ? 'primary' : 'outline'} size="sm" onClick={onToggleLive}>
+          {isLive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+          {isLive ? 'Pause' : 'Resume'}
+        </Button>
+        <IconButton
+          icon={<RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />}
+          variant="outline"
+          onClick={onRefresh}
+          disabled={loading}
+        />
+        <Button variant="primary" onClick={onGenerateReport}>
+          <Leaf className="w-4 h-4" />
+          Generate Report
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+
 const quickActions = [
   { id: 'add-activity', icon: Plus, label: 'Add Activity', color: 'bg-grass-500', path: '/activities' },
   { id: 'generate-report', icon: FileText, label: 'Generate Report', color: 'bg-blue-500', path: '/reports' },
@@ -159,57 +287,25 @@ export const Dashboard: React.FC = () => {
       }
 
       const allProjects = projectsResponse.data as any[];
-
-      // Aggregate data from all projects
-      let totalScope1 = 0;
-      let totalScope2 = 0;
-      let totalScope3 = 0;
-      let totalActivities = 0;
-      let calculatedActivities = 0;
-      const scope3Categories: Record<string, number> = {};
-      const recentActivitiesList: any[] = [];
-
+      const bucket: ProjectBucket = {
+        scope1: 0,
+        scope2: 0,
+        scope3: 0,
+        activityCount: 0,
+        calculatedCount: 0,
+        scope3Categories: {},
+        recent: [],
+      };
       for (const project of allProjects as any[]) {
-        try {
-          // Get totals for each project
-          const totalsResponse = await calculationsApi.getTotals(project.id);
-          if (totalsResponse.success && totalsResponse.data) {
-            const totals = totalsResponse.data as any;
-            totalScope1 += totals.scope1 || 0;
-            totalScope2 += totals.scope2 || 0;
-            totalScope3 += totals.scope3 || 0;
-            totalActivities += totals.activityCount || 0;
-            calculatedActivities += totals.calculatedCount || 0;
-
-            // Aggregate scope 3 categories
-            if (totals.scope3Categories) {
-              for (const [cat, val] of Object.entries(totals.scope3Categories as Record<string, number>)) {
-                scope3Categories[cat] = (scope3Categories[cat] || 0) + (val as number);
-              }
-            }
-          }
-
-          // Get recent activities
-          const activitiesResponse = await activitiesApi.getByProject(project.id);
-          if (activitiesResponse.success && activitiesResponse.data) {
-            const activityData = activitiesResponse.data as any[];
-            const projectActivities = activityData.slice(0, 3).map((a: any) => ({
-              id: a.id,
-              type: a.activityType?.replace(/_/g, ' ') || 'Activity',
-              amount: `${a.quantity?.toLocaleString() || 0} ${a.unit || ''}`,
-              date: new Date(a.createdAt).toLocaleDateString(),
-              scope: a.scope,
-              status: a.calculationStatus || 'pending',
-              emissions: (a.totalEmissionsKgCo2e || 0) / 1000,
-              projectName: project.name,
-            }));
-            recentActivitiesList.push(...projectActivities);
-          }
-        } catch {
-          // Continue with other projects if one fails
-        }
+        await addProjectMetrics(project, bucket);
       }
-
+      const totalScope1 = bucket.scope1;
+      const totalScope2 = bucket.scope2;
+      const totalScope3 = bucket.scope3;
+      const totalActivities = bucket.activityCount;
+      const calculatedActivities = bucket.calculatedCount;
+      const scope3Categories = bucket.scope3Categories;
+      const recentActivitiesList = bucket.recent;
       const totalEmissions = totalScope1 + totalScope2 + totalScope3;
 
       // Build category emissions from scope 3 categories
@@ -218,7 +314,7 @@ export const Dashboard: React.FC = () => {
           category: category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
           emissions: emissions / 1000, // Convert to tonnes
           icon: getCategoryIcon(category),
-          trend: -Math.floor(Math.random() * 15), // Placeholder for actual trend data
+          trend: 0, // No period-over-period delta until historical comparison exists
           color: getCategoryColor(category),
         }))
         .sort((a, b) => b.emissions - a.emissions)
@@ -296,58 +392,16 @@ export const Dashboard: React.FC = () => {
       animate="show"
       className="space-y-6 pb-8"
     >
-      {/* Page Header with Quick Actions */}
-      <motion.div variants={item} className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-earth-800 dark:text-earth-100">
-              Dashboard
-            </h1>
-            <Badge variant={isLive ? 'grass' : 'default'} className="animate-pulse">
-              <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-grass-500' : 'bg-earth-400'} mr-1`} />
-              {isLive ? 'Live' : 'Paused'}
-            </Badge>
-          </div>
-          <p className="text-earth-500 dark:text-earth-400 mt-1 text-lg">
-            Welcome back, {user?.name || 'User'}. Real-time overview of your carbon footprint.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(e.target.value)}
-            className="px-4 py-2 rounded-xl border border-earth-200 dark:border-earth-600
-                     bg-white dark:bg-earth-800 text-earth-700 dark:text-earth-200
-                     focus:ring-2 focus:ring-grass-500 cursor-pointer"
-          >
-            <option value="2024">2024</option>
-            <option value="2023">2023</option>
-            <option value="2022">2022</option>
-          </select>
-
-          <Button
-            variant={isLive ? 'primary' : 'outline'}
-            size="sm"
-            onClick={() => setIsLive(!isLive)}
-          >
-            {isLive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            {isLive ? 'Pause' : 'Resume'}
-          </Button>
-
-          <IconButton
-            icon={<RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />}
-            variant="outline"
-            onClick={loadDashboardData}
-            disabled={loading}
-          />
-
-          <Button variant="primary" onClick={() => navigate('/reports')}>
-            <Leaf className="w-4 h-4" />
-            Generate Report
-          </Button>
-        </div>
-      </motion.div>
+      <DashboardHeader
+        userName={user?.name}
+        isLive={isLive}
+        loading={loading}
+        selectedYear={selectedYear}
+        onYearChange={setSelectedYear}
+        onToggleLive={() => setIsLive(!isLive)}
+        onRefresh={loadDashboardData}
+        onGenerateReport={() => navigate('/reports')}
+      />
 
       {/* Error Alert */}
       {error && (
@@ -396,7 +450,7 @@ export const Dashboard: React.FC = () => {
             title="Total Emissions"
             value={`${(data.totalEmissions / 1000).toFixed(1)}`}
             unit="tCO₂e"
-            change={data.totalEmissions > 0 ? -8.2 : 0}
+            change={trendChange(data.totalEmissions, -8.2)}
             changeLabel="vs last year"
             icon={<Leaf className="w-6 h-6" />}
           />
@@ -408,7 +462,7 @@ export const Dashboard: React.FC = () => {
             title="Scope 1 (Direct)"
             value={`${(data.scope1Emissions / 1000).toFixed(2)}`}
             unit="tCO₂e"
-            change={data.scope1Emissions > 0 ? -12.5 : 0}
+            change={trendChange(data.scope1Emissions, -12.5)}
             changeLabel="vs last year"
             icon={<Factory className="w-6 h-6" />}
           />
@@ -419,7 +473,7 @@ export const Dashboard: React.FC = () => {
             title="Scope 2 (Energy)"
             value={`${(data.scope2Emissions / 1000).toFixed(2)}`}
             unit="tCO₂e"
-            change={data.scope2Emissions > 0 ? -6.8 : 0}
+            change={trendChange(data.scope2Emissions, -6.8)}
             changeLabel="vs last year"
             icon={<Zap className="w-6 h-6" />}
           />
@@ -430,7 +484,7 @@ export const Dashboard: React.FC = () => {
             title="Scope 3 (Value Chain)"
             value={`${(data.scope3Emissions / 1000).toFixed(2)}`}
             unit="tCO₂e"
-            change={data.scope3Emissions > 0 ? -4.2 : 0}
+            change={trendChange(data.scope3Emissions, -4.2)}
             changeLabel="vs last year"
             icon={<Truck className="w-6 h-6" />}
           />

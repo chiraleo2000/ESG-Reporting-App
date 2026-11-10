@@ -13,6 +13,7 @@ jest.mock('../../src/config', () => ({
   config: {
     jwt: {
       secret: 'test-secret-key-123',
+      refreshSecret: 'test-refresh-secret-key-456',
       expiresIn: '24h',
       refreshExpiresIn: '7d',
     },
@@ -22,13 +23,26 @@ jest.mock('../../src/config', () => ({
   },
 }));
 
-// Mock database for authorizeProjectOwner
+// Mock database for authorizeProjectMember
 jest.mock('../../src/config/database', () => ({
   pool: { query: jest.fn() },
   db: {
     query: jest.fn(),
     queryOne: jest.fn(),
   },
+}));
+
+jest.mock('../../src/config/redis', () => ({
+  redis: {
+    exists: jest.fn().mockResolvedValue(0),
+  },
+  cacheKeys: {
+    tokenBlacklist: (token: string) => `blacklist:${token}`,
+  },
+}));
+
+jest.mock('../../src/services/auditService', () => ({
+  logSecurityEvent: jest.fn().mockResolvedValue('audit-id'),
 }));
 
 jest.mock('../../src/utils/logger', () => ({
@@ -41,6 +55,8 @@ import {
   authorize,
   authorizeSignature,
   authorizeProjectOwner,
+  authorizeProjectMember,
+  requireMfaCompleted,
   generateTokens,
   verifyRefreshToken,
   generateToken,
@@ -49,6 +65,7 @@ import {
 } from '../../src/middleware/auth';
 
 import { db } from '../../src/config/database';
+import { redis } from '../../src/config/redis';
 
 function mockRequest(overrides: any = {}): any {
   return {
@@ -279,12 +296,12 @@ describe('Auth Middleware', () => {
   });
 
   // ==========================================================================
-  // authorizeProjectOwner
+  // authorizeProjectMember / authorizeProjectOwner
   // ==========================================================================
-  describe('authorizeProjectOwner', () => {
-    it('should allow project owner', async () => {
-      (db.queryOne as jest.Mock).mockResolvedValue({ created_by: 'u-1' });
-      const middleware = authorizeProjectOwner();
+  describe('authorizeProjectMember', () => {
+    it('should allow member meeting min role', async () => {
+      (db.queryOne as jest.Mock).mockResolvedValue({ role: 'owner' });
+      const middleware = authorizeProjectMember('owner');
       const req = mockRequest({ user: { userId: 'u-1' }, params: { projectId: 'p-1' } });
       const res = mockResponse();
       const next = jest.fn();
@@ -292,11 +309,37 @@ describe('Auth Middleware', () => {
       await middleware(req, res, next);
 
       expect(next).toHaveBeenCalledWith();
+      expect(req.projectRole).toBe('owner');
     });
 
-    it('should reject non-owner', async () => {
-      (db.queryOne as jest.Mock).mockResolvedValue({ created_by: 'other-user' });
-      const middleware = authorizeProjectOwner();
+    it('should allow editor when minRole is viewer', async () => {
+      (db.queryOne as jest.Mock).mockResolvedValue({ role: 'editor' });
+      const middleware = authorizeProjectMember('viewer');
+      const req = mockRequest({ user: { userId: 'u-1' }, params: { projectId: 'p-1' } });
+      const res = mockResponse();
+      const next = jest.fn();
+
+      await middleware(req, res, next);
+      expect(next).toHaveBeenCalledWith();
+    });
+
+    it('should reject insufficient role', async () => {
+      (db.queryOne as jest.Mock).mockResolvedValue({ role: 'viewer' });
+      const middleware = authorizeProjectMember('editor');
+      const req = mockRequest({ user: { userId: 'u-1' }, params: { projectId: 'p-1' } });
+      const res = mockResponse();
+      const next = jest.fn();
+
+      await middleware(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({
+        message: expect.stringContaining('Insufficient project permissions'),
+      }));
+    });
+
+    it('should reject non-member', async () => {
+      (db.queryOne as jest.Mock).mockResolvedValue(null);
+      const middleware = authorizeProjectMember('viewer');
       const req = mockRequest({ user: { userId: 'u-1' }, params: { projectId: 'p-1' } });
       const res = mockResponse();
       const next = jest.fn();
@@ -308,22 +351,8 @@ describe('Auth Middleware', () => {
       }));
     });
 
-    it('should reject when project not found', async () => {
-      (db.queryOne as jest.Mock).mockResolvedValue(null);
-      const middleware = authorizeProjectOwner();
-      const req = mockRequest({ user: { userId: 'u-1' }, params: { projectId: 'p-1' } });
-      const res = mockResponse();
-      const next = jest.fn();
-
-      await middleware(req, res, next);
-
-      expect(next).toHaveBeenCalledWith(expect.objectContaining({
-        message: expect.stringContaining('Project not found'),
-      }));
-    });
-
     it('should reject when no user', async () => {
-      const middleware = authorizeProjectOwner();
+      const middleware = authorizeProjectMember('viewer');
       const req = mockRequest({ params: { projectId: 'p-1' } });
       const res = mockResponse();
       const next = jest.fn();
@@ -336,7 +365,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should reject when no project ID', async () => {
-      const middleware = authorizeProjectOwner();
+      const middleware = authorizeProjectMember('viewer');
       const req = mockRequest({ user: { userId: 'u-1' }, params: {}, body: {} });
       const res = mockResponse();
       const next = jest.fn();
@@ -348,8 +377,8 @@ describe('Auth Middleware', () => {
       }));
     });
 
-    it('should use custom param name', async () => {
-      (db.queryOne as jest.Mock).mockResolvedValue({ created_by: 'u-1' });
+    it('should use custom param name via authorizeProjectOwner alias', async () => {
+      (db.queryOne as jest.Mock).mockResolvedValue({ role: 'owner' });
       const middleware = authorizeProjectOwner('pid');
       const req = mockRequest({ user: { userId: 'u-1' }, params: { pid: 'p-1' } });
       const res = mockResponse();
@@ -361,7 +390,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should use body projectId when param missing', async () => {
-      (db.queryOne as jest.Mock).mockResolvedValue({ created_by: 'u-1' });
+      (db.queryOne as jest.Mock).mockResolvedValue({ role: 'owner' });
       const middleware = authorizeProjectOwner();
       const req = mockRequest({ user: { userId: 'u-1' }, params: {}, body: { projectId: 'p-1' } });
       const res = mockResponse();
@@ -370,6 +399,22 @@ describe('Auth Middleware', () => {
       await middleware(req, res, next);
 
       expect(next).toHaveBeenCalledWith();
+    });
+
+    it('should reject blacklisted tokens in authenticate', async () => {
+      (redis.exists as jest.Mock).mockResolvedValueOnce(1);
+      const payload = { userId: 'u-1', email: 'test@test.com', name: 'Test', role: 'owner' };
+      const token = jwt.sign(payload, 'test-secret-key-123', { expiresIn: '1h' });
+      const req = mockRequest({ headers: { authorization: `Bearer ${token}` } });
+      const res = mockResponse();
+      const next = jest.fn();
+
+      await authenticate(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({
+        message: expect.stringContaining('revoked'),
+      }));
+      (redis.exists as jest.Mock).mockResolvedValue(0);
     });
   });
 
@@ -407,7 +452,7 @@ describe('Auth Middleware', () => {
     it('should verify valid refresh token', () => {
       const token = jwt.sign(
         { userId: 'u-1', type: 'refresh' },
-        'test-secret-key-123',
+        'test-refresh-secret-key-456',
         { expiresIn: '7d' }
       );
 
@@ -418,7 +463,7 @@ describe('Auth Middleware', () => {
     it('should throw for non-refresh token', () => {
       const token = jwt.sign(
         { userId: 'u-1', type: 'access' },
-        'test-secret-key-123',
+        'test-refresh-secret-key-456',
         { expiresIn: '1h' }
       );
 
@@ -480,6 +525,50 @@ describe('Auth Middleware', () => {
       expect(hash).toBeDefined();
       expect(hash).not.toBe('mypassword');
       expect(hash.startsWith('$2')).toBe(true); // bcrypt prefix
+    });
+  });
+
+  describe('requireMfaCompleted', () => {
+    it('allows roles below director without an otp amr claim', () => {
+      const req = mockRequest({ user: { id: 'u-1', role: 'editor', amr: ['pwd'] } });
+      const res = mockResponse();
+      const next = jest.fn();
+
+      requireMfaCompleted(req, res, next);
+
+      expect(next).toHaveBeenCalledWith();
+    });
+
+    it('rejects owner and director sessions that have not completed TOTP', () => {
+      const res = mockResponse();
+      const next = jest.fn();
+
+      requireMfaCompleted(mockRequest({ user: { id: 'u-1', role: 'owner', amr: ['pwd'] } }), res, next);
+      requireMfaCompleted(
+        mockRequest({
+          user: { id: 'u-2', role: 'viewer', amr: ['pwd'] },
+          projectRole: 'director',
+        }),
+        res,
+        next
+      );
+
+      expect(next).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        message: 'MFA verification required for this operation',
+      }));
+      expect(next).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        message: 'MFA verification required for this operation',
+      }));
+    });
+
+    it('allows owner when amr includes otp', () => {
+      const req = mockRequest({ user: { id: 'u-1', role: 'owner', amr: ['pwd', 'otp'] } });
+      const res = mockResponse();
+      const next = jest.fn();
+
+      requireMfaCompleted(req, res, next);
+
+      expect(next).toHaveBeenCalledWith();
     });
   });
 

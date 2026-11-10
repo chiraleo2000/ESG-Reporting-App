@@ -71,4 +71,39 @@ describe('apiFetch', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe('Request timed out');
   });
+
+  it('reads non-json bodies, parent aborts, and a failed refresh', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'text/plain' },
+        json: async () => ({}),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ message: 'expired' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: true, data: {} }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    const { projectsApi } = await import('../lib/api');
+    const plain = await projectsApi.getAll();
+    expect(plain.success).toBe(true);
+
+    const expired = await projectsApi.getAll();
+    expect(expired.success).toBe(false);
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue('offline'));
+    const { activitiesApi } = await import('../lib/api');
+    const failed = await activitiesApi.getByProject('p1');
+    expect(failed.success).toBe(false);
+    expect(failed.error).toBe('Network error occurred');
+  });
 });

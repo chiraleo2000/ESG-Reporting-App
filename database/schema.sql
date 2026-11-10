@@ -62,6 +62,11 @@ CREATE TABLE users (
   last_login_at TIMESTAMP,
   password_changed_at TIMESTAMP,
   is_active BOOLEAN DEFAULT TRUE,
+  -- TOTP MFA (6-digit authenticator)
+  mfa_enabled BOOLEAN DEFAULT FALSE,
+  mfa_secret TEXT, -- encrypted at rest
+  mfa_backup_codes JSONB DEFAULT '[]', -- array of bcrypt hashes
+  mfa_verified_at TIMESTAMP,
   metadata JSONB DEFAULT '{}',
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
@@ -1458,10 +1463,37 @@ CREATE TABLE IF NOT EXISTS data_sources (
 CREATE INDEX IF NOT EXISTS idx_data_sources_project ON data_sources(project_id);
 CREATE INDEX IF NOT EXISTS idx_data_sources_type ON data_sources(type);
 CREATE INDEX IF NOT EXISTS idx_data_sources_enabled ON data_sources(enabled);
+CREATE INDEX IF NOT EXISTS idx_data_sources_project_status ON data_sources(project_id, last_sync_status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activities_project_status ON activities(project_id, calculation_status, created_at DESC);
 
 -- Data Sources update trigger
 CREATE TRIGGER update_data_sources_updated_at BEFORE UPDATE ON data_sources 
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
+-- SECURITY ALERTS (anomaly detection)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS security_alerts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  alert_type VARCHAR(100) NOT NULL,
+  severity VARCHAR(20) NOT NULL DEFAULT 'medium',
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+  details JSONB DEFAULT '{}',
+  ip_address VARCHAR(45),
+  resolved BOOLEAN DEFAULT FALSE,
+  resolved_at TIMESTAMP,
+  resolved_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_security_alerts_type ON security_alerts(alert_type);
+CREATE INDEX IF NOT EXISTS idx_security_alerts_severity ON security_alerts(severity);
+CREATE INDEX IF NOT EXISTS idx_security_alerts_created ON security_alerts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_security_alerts_unresolved ON security_alerts(resolved, created_at DESC);
 
 -- ============================================
 -- SEED CBAM DEFAULT VALUES

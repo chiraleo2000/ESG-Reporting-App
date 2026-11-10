@@ -1,20 +1,24 @@
+import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import { asyncHandler } from '../middleware/errorHandler';
-import { authenticate, authorizeProjectOwner } from '../middleware/auth';
+import {
+  authenticate,
+  authorizeProjectMember,
+  authorizeEntityProjectMember,
+} from '../middleware/auth';
 import { config } from '../config';
 import * as fileController from '../controllers/fileController';
 
 const router = Router();
 
-// Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, config.upload.uploadDir);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const uniqueSuffix = `${Date.now()}-${randomBytes(8).toString('hex')}`;
     const ext = path.extname(file.originalname);
     cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
   },
@@ -37,56 +41,52 @@ const upload = multer({
   },
 });
 
-// All routes require authentication
 router.use(authenticate);
 
-// Upload file
 router.post(
   '/upload',
   upload.single('file'),
   asyncHandler(fileController.uploadFile)
 );
 
-// Get files for a project
 router.get(
   '/project/:projectId',
-  authorizeProjectOwner('projectId'),
+  authorizeProjectMember('viewer', 'projectId'),
   asyncHandler(fileController.getProjectFiles)
 );
 
-// Get single file info
-router.get(
-  '/:id',
-  asyncHandler(fileController.getFile)
-);
-
-// Delete file
-router.delete(
-  '/:id',
-  asyncHandler(fileController.deleteFile)
-);
-
-// Download file template
 router.get(
   '/template/:format',
   asyncHandler(fileController.downloadTemplate)
 );
 
-// Re-parse file (if parsing failed initially)
+router.get(
+  '/:id',
+  authorizeEntityProjectMember('files', 'id', 'viewer'),
+  asyncHandler(fileController.getFile)
+);
+
+router.delete(
+  '/:id',
+  authorizeEntityProjectMember('files', 'id', 'editor'),
+  asyncHandler(fileController.deleteFile)
+);
+
 router.post(
   '/:id/reparse',
+  authorizeEntityProjectMember('files', 'id', 'editor'),
   asyncHandler(fileController.reparseFile)
 );
 
-// Preview activities in an uploaded workbook
 router.post(
   '/:id/parse',
+  authorizeEntityProjectMember('files', 'id', 'editor'),
   asyncHandler(fileController.parseExcelActivities)
 );
 
-// Create activities from a parsed workbook
 router.post(
   '/:id/import',
+  authorizeEntityProjectMember('files', 'id', 'editor'),
   asyncHandler(fileController.importExcelActivities)
 );
 

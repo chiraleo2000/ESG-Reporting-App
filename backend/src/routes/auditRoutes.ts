@@ -1,47 +1,56 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
-import { authenticate, authorizeProjectOwner, authorize } from '../middleware/auth';
+import {
+  authenticate,
+  authorizeProjectMember,
+  authorizeEntityProjectMember,
+  authorize,
+  requireMfaCompleted,
+} from '../middleware/auth';
 import { validate, paginationSchema } from '../middleware/validation';
 import * as auditController from '../controllers/auditController';
 
 const router = Router();
 
-// All routes require authentication
 router.use(authenticate);
 
-// Get audit logs for a project
+// Global search must be registered before /:id
+router.get(
+  '/search/global',
+  authorize('owner'),
+  asyncHandler(auditController.searchGlobalAuditLogs)
+);
+
 router.get(
   '/project/:projectId',
-  authorizeProjectOwner('projectId'),
+  authorizeProjectMember('auditor', 'projectId'),
   validate(paginationSchema, 'query'),
   asyncHandler(auditController.getProjectAuditLogs)
 );
 
-// Get audit log summary for a project
 router.get(
   '/project/:projectId/summary',
-  authorizeProjectOwner('projectId'),
+  authorizeProjectMember('auditor', 'projectId'),
   asyncHandler(auditController.getAuditSummary)
 );
 
-// Export audit logs for a project
 router.post(
   '/project/:projectId/export',
-  authorizeProjectOwner('projectId'),
+  authorizeProjectMember('auditor', 'projectId'),
+  requireMfaCompleted,
   asyncHandler(auditController.exportAuditLogs)
 );
 
-// Get single audit log entry
-router.get(
-  '/:id',
-  asyncHandler(auditController.getAuditLog)
-);
-
-// Filter audit logs by action type
 router.get(
   '/project/:projectId/filter',
-  authorizeProjectOwner('projectId'),
+  authorizeProjectMember('auditor', 'projectId'),
   asyncHandler(auditController.filterAuditLogs)
+);
+
+router.get(
+  '/:id',
+  authorizeEntityProjectMember('audit_logs', 'id', 'auditor'),
+  asyncHandler(auditController.getAuditLog)
 );
 
 export default router;

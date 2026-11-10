@@ -294,7 +294,8 @@ export async function exportAuditLogs(req: Request, res: Response): Promise<void
 }
 
 /**
- * Get audit log by ID
+ * Get audit log by ID — membership already enforced by authorizeEntityProjectMember
+ * (or caller must be owner/admin for global logs without project_id)
  */
 export async function getAuditLog(req: Request, res: Response): Promise<void> {
   const { id } = (req.params as Record<string, string>);
@@ -313,6 +314,16 @@ export async function getAuditLog(req: Request, res: Response): Promise<void> {
 
   const row = result.rows[0];
 
+  // Extra guard if middleware did not resolve project (null project_id global logs)
+  if (!row.project_id) {
+    const role = req.user?.role;
+    if (role !== 'owner' && role !== ('admin' as any)) {
+      throw new NotFoundError('Audit log not found');
+    }
+  } else if (req.projectId && req.projectId !== row.project_id) {
+    throw new NotFoundError('Audit log not found');
+  }
+
   res.json({
     success: true,
     data: {
@@ -328,6 +339,42 @@ export async function getAuditLog(req: Request, res: Response): Promise<void> {
       ipAddress: row.ip_address,
       userAgent: row.user_agent,
       createdAt: row.created_at,
+    },
+  });
+}
+
+/**
+ * Global audit search — owner/admin only
+ */
+export async function searchGlobalAuditLogs(req: Request, res: Response): Promise<void> {
+  const { q, page = 1, limit = 50 } = req.query;
+  const offset = (Number(page) - 1) * Number(limit);
+  const pattern = `%${q || ''}%`;
+
+  const countResult = await db.query(
+    `SELECT COUNT(*)::int AS total FROM audit_logs
+     WHERE action ILIKE $1 OR entity_type ILIKE $1 OR details::text ILIKE $1`,
+    [pattern]
+  );
+
+  const result = await db.query(
+    `SELECT al.*, u.name as user_name, u.email as user_email
+     FROM audit_logs al
+     LEFT JOIN users u ON al.user_id = u.id
+     WHERE al.action ILIKE $1 OR al.entity_type ILIKE $1 OR al.details::text ILIKE $1
+     ORDER BY al.created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [pattern, Number(limit), offset]
+  );
+
+  res.json({
+    success: true,
+    data: result.rows,
+    pagination: {
+      page: Number(page),
+      limit: Number(limit),
+      total: countResult.rows[0].total,
+      totalPages: Math.ceil(countResult.rows[0].total / Number(limit)),
     },
   });
 }

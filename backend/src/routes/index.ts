@@ -13,6 +13,7 @@ import embeddingRoutes from './embeddingRoutes';
 import helpRoutes from './helpRoutes';
 import goalsRoutes from './goalsRoutes';
 import dataSourceRoutes from './dataSourceRoutes';
+import securityRoutes from './securityRoutes';
 
 const router = Router();
 const API_VERSION = '/v1';
@@ -34,6 +35,7 @@ router.use(`${API_VERSION}/standards`, standardRoutes);
 router.use(`${API_VERSION}/embeddings`, embeddingRoutes);
 router.use(`${API_VERSION}/goals`, goalsRoutes);
 router.use(`${API_VERSION}/data-sources`, dataSourceRoutes);
+router.use(`${API_VERSION}/security`, securityRoutes);
 
 // API Info (versioned)
 router.get(`${API_VERSION}`, (req, res) => {
@@ -56,6 +58,7 @@ router.get(`${API_VERSION}`, (req, res) => {
       embeddings: `${API_VERSION}/embeddings`,
       goals: `${API_VERSION}/goals`,
       dataSources: `${API_VERSION}/data-sources`,
+      security: `${API_VERSION}/security`,
     },
     standards: ['EU CBAM', 'UK CBAM', 'China Carbon Market', 'Japan MAFF ESG', 'Korea K-ESG', 'Thailand Thai-ESG'],
   });

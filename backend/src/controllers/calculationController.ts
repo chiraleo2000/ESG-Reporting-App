@@ -654,6 +654,77 @@ export async function getProjectTotals(req: Request, res: Response): Promise<voi
   });
 }
 
+type LifecycleStages = {
+  rawMaterials: number;
+  production: number;
+  distribution: number;
+  use: number;
+  endOfLife: number;
+};
+
+type ScopeEmissions = {
+  scope1: number;
+  scope2Location: number;
+  scope2Market: number;
+  scope3Upstream: number;
+  scope3Downstream: number;
+};
+
+const UPSTREAM_SCOPE3 = new Set(['purchased_goods', 'capital_goods', 'fuel_energy', 'upstream_transport', 'waste', 'business_travel', 'employee_commuting', 'upstream_leased']);
+
+function addLifecycleEmissions(scope: string, category: string | undefined, emissions: number, lifecycleStages: LifecycleStages) {
+  if (scope === 'scope1' || scope === 'scope2') {
+    lifecycleStages.production += emissions;
+    return;
+  }
+  if (scope !== 'scope3') return;
+  switch (category) {
+    case 'purchased_goods':
+    case 'capital_goods':
+    case 'fuel_energy':
+      lifecycleStages.rawMaterials += emissions;
+      break;
+    case 'upstream_transport':
+    case 'downstream_transport':
+      lifecycleStages.distribution += emissions;
+      break;
+    case 'waste':
+    case 'end_of_life':
+      lifecycleStages.endOfLife += emissions;
+      break;
+    case 'use_of_products':
+    case 'processing':
+      lifecycleStages.use += emissions;
+      break;
+    default:
+      lifecycleStages.production += emissions;
+  }
+}
+
+function addOrganizationEmissions(
+  scope: string,
+  category: string,
+  emissions: number,
+  scopeEmissions: ScopeEmissions,
+  scope3CategoryBreakdown: Record<string, number>
+) {
+  switch (scope) {
+    case 'scope1':
+      scopeEmissions.scope1 += emissions;
+      break;
+    case 'scope2':
+      scopeEmissions.scope2Location += emissions;
+      break;
+    case 'scope3':
+      scope3CategoryBreakdown[category] = (scope3CategoryBreakdown[category] || 0) + emissions;
+      if (UPSTREAM_SCOPE3.has(category)) scopeEmissions.scope3Upstream += emissions;
+      else scopeEmissions.scope3Downstream += emissions;
+      break;
+    default:
+      break;
+  }
+}
+
 /**
  * Calculate both CFP and CFO
  */
@@ -707,54 +778,9 @@ export async function calculateBoth(req: Request, res: Response): Promise<void> 
 
   for (const activity of activitiesResult.rows) {
     const emissions = Number.parseFloat(activity.total_emissions_kg_co2e) || 0;
-
-    // CFP mapping
-    if (activity.scope === 'scope1' || activity.scope === 'scope2') {
-      lifecycleStages.production += emissions;
-    } else if (activity.scope === 'scope3') {
-      switch (activity.scope3_category) {
-        case 'purchased_goods':
-        case 'capital_goods':
-        case 'fuel_energy':
-          lifecycleStages.rawMaterials += emissions;
-          break;
-        case 'upstream_transport':
-        case 'downstream_transport':
-          lifecycleStages.distribution += emissions;
-          break;
-        case 'waste':
-        case 'end_of_life':
-          lifecycleStages.endOfLife += emissions;
-          break;
-        case 'use_of_products':
-        case 'processing':
-          lifecycleStages.use += emissions;
-          break;
-        default:
-          lifecycleStages.production += emissions;
-      }
-    }
-
-    // CFO mapping
-    switch (activity.scope) {
-      case 'scope1':
-        scopeEmissions.scope1 += emissions;
-        break;
-      case 'scope2':
-        scopeEmissions.scope2Location += emissions;
-        break;
-      case 'scope3': {
-        const category = activity.scope3_category || 'other';
-        scope3CategoryBreakdown[category] = (scope3CategoryBreakdown[category] || 0) + emissions;
-        const upstreamCategories = ['purchased_goods', 'capital_goods', 'fuel_energy', 'upstream_transport', 'waste', 'business_travel', 'employee_commuting', 'upstream_leased'];
-        if (upstreamCategories.includes(category)) {
-          scopeEmissions.scope3Upstream += emissions;
-        } else {
-          scopeEmissions.scope3Downstream += emissions;
-        }
-        break;
-      }
-    }
+    const category = activity.scope3_category || 'other';
+    addLifecycleEmissions(activity.scope, activity.scope3_category, emissions, lifecycleStages);
+    addOrganizationEmissions(activity.scope, category, emissions, scopeEmissions, scope3CategoryBreakdown);
   }
 
   const cfpTotal = Object.values(lifecycleStages).reduce((sum, val) => sum + val, 0);

@@ -27,6 +27,9 @@ export function initializeJobs(): void {
   // Cache cleanup - Daily at 4:00 AM UTC
   scheduleJob('cache_cleanup', '0 4 * * *', runCacheCleanup);
 
+  // Security anomaly detection - every 5 minutes
+  scheduleJob('security_anomaly_scan', '*/5 * * * *', runSecurityAnomalyScan);
+
   logger.info(`Scheduled ${jobs.size} jobs successfully`);
 }
 
@@ -260,6 +263,15 @@ async function runDatabaseHealthCheck(): Promise<void> {
 }
 
 /**
+ * Security anomaly detection job
+ */
+async function runSecurityAnomalyScan(): Promise<void> {
+  const { runAnomalyDetection } = await import('../services/securityAlertService');
+  const result = await runAnomalyDetection();
+  logger.info(`Security anomaly scan created ${result.alertsCreated} alerts`);
+}
+
+/**
  * Cache cleanup job
  */
 async function runCacheCleanup(): Promise<void> {
@@ -340,6 +352,7 @@ export async function triggerJob(jobName: string): Promise<{ success: boolean; m
     report_reminder: runReportReminder,
     db_health_check: runDatabaseHealthCheck,
     cache_cleanup: runCacheCleanup,
+    security_anomaly_scan: runSecurityAnomalyScan,
   };
 
   const handler = jobHandlers[jobName];

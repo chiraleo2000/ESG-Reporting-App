@@ -24,6 +24,9 @@ jest.mock('../../src/config/redis', () => ({
       project: (id: string) => `project:${id}`,
     },
   },
+  cacheKeys: {
+    tokenBlacklist: (token: string) => `blacklist:${token}`,
+  },
 }));
 
 // Mock logger
@@ -43,6 +46,23 @@ jest.mock('../../src/middleware/auth', () => ({
   verifyRefreshToken: jest.fn().mockReturnValue({ userId: 'user-123' }),
   hashPassword: jest.fn().mockResolvedValue('hashed-password'),
   comparePassword: jest.fn(),
+  persistRefreshToken: jest.fn().mockResolvedValue(undefined),
+  rotateRefreshToken: jest.fn().mockResolvedValue('rotated-refresh-token'),
+}));
+
+jest.mock('../../src/services/auditService', () => ({
+  logSecurityEvent: jest.fn().mockResolvedValue('evt-1'),
+}));
+
+jest.mock('../../src/services/mfaService', () => ({
+  rolesRequiringMfa: jest.fn().mockReturnValue(false),
+  decryptSecret: jest.fn(),
+  verifyTotp: jest.fn(),
+  generateMfaSecret: jest.fn(),
+  buildOtpauthUri: jest.fn(),
+  encryptSecret: jest.fn(),
+  generateBackupCodes: jest.fn(),
+  consumeBackupCode: jest.fn(),
 }));
 
 import { db } from '../../src/config/database';
@@ -61,11 +81,15 @@ describe('Auth Controller', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (mockDb.query as jest.Mock).mockReset();
+    mockCompare.mockReset();
     mockRequest = {
       body: {},
       params: {},
       query: {},
       headers: {},
+      ip: '127.0.0.1',
+      get: jest.fn().mockReturnValue('jest-agent'),
       user: { id: 'user-123', userId: 'user-123', email: 'test@example.com', role: 'owner', name: 'Test User', signatureAuthorized: false } as any,
     };
     mockResponse = {
@@ -146,6 +170,7 @@ describe('Auth Controller', () => {
           user: expect.objectContaining({ email: 'admin@esgdemo.com', role: 'owner' }),
           token: 'new-access-token',
           refreshToken: 'new-refresh-token',
+          mfaRequired: false,
         }),
       });
     });
@@ -360,7 +385,7 @@ describe('Auth Controller', () => {
 
       expect(mockResponse.json).toHaveBeenCalledWith({
         success: true,
-        data: { token: 'new-access-token', refreshToken: 'new-refresh-token' },
+        data: { token: 'new-access-token', refreshToken: 'rotated-refresh-token' },
       });
     });
 

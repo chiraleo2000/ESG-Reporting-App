@@ -127,8 +127,8 @@ describe('Project Controller', () => {
   // ===================== GET SINGLE PROJECT =====================
   describe('getProject', () => {
     it('should return project with members and activity summary', async () => {
-      (req as any).project = mockProject;
       (mockDb.query as jest.Mock)
+        .mockResolvedValueOnce({ rows: [mockProject], rowCount: 1 }) // load project
         .mockResolvedValueOnce({ rows: [{ id: 'user-1', email: 'a@b.com', name: 'Test', role: 'owner' }], rowCount: 1 })
         .mockResolvedValueOnce({ rows: [{ scope: 'scope1', count: '5', calculated_count: '3' }], rowCount: 1 });
 
@@ -221,7 +221,7 @@ describe('Project Controller', () => {
       req.body = { email: 'existing@user.com' };
       (mockDb.query as jest.Mock)
         .mockResolvedValueOnce({ rows: [{ id: 'user-2', email: 'existing@user.com', name: 'Dup' }], rowCount: 1 })
-        .mockResolvedValueOnce({ rows: [{ id: 'member-1' }], rowCount: 1 }); // already member
+        .mockResolvedValueOnce({ rows: [{ id: 'member-1', is_active: true }], rowCount: 1 }); // already active member
 
       await expect(addProjectMember(req as Request, res as Response))
         .rejects.toThrow('User is already a member of this project');
@@ -286,10 +286,12 @@ describe('Project Controller', () => {
 
     it('should reject removing owner', async () => {
       req.params = { id: 'proj-1', memberId: 'user-1' };
-      (mockDb.query as jest.Mock).mockResolvedValueOnce({ rows: [{ role: 'owner' }], rowCount: 1 });
+      (mockDb.query as jest.Mock)
+        .mockResolvedValueOnce({ rows: [{ role: 'owner' }], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [{ count: 1 }], rowCount: 1 }); // last owner
 
       await expect(removeProjectMember(req as Request, res as Response))
-        .rejects.toThrow('Cannot remove project owner');
+        .rejects.toThrow('Cannot remove the last project owner');
     });
   });
 

@@ -65,6 +65,115 @@ const materialFactors = [
   { id: 6, material: 'Fertilizer (Urea)', unit: 'tCO2e/tonne', factor: 2.07, category: 'CBAM Materials', source: 'EU CBAM' },
 ];
 
+type FactorTab = 'grid' | 'fuel' | 'materials';
+
+const FACTOR_TITLES = {
+  grid: 'Grid Emission Factors',
+  fuel: 'Fuel Emission Factors',
+  materials: 'Material Emission Factors',
+} as const;
+
+function factorsForTab(tab: FactorTab, grid: any[], fuel: any[], materials: any[]) {
+  if (tab === 'grid') return grid;
+  if (tab === 'fuel') return fuel;
+  return materials;
+}
+
+function factorHeadings(tab: FactorTab) {
+  if (tab === 'grid') {
+    return (
+      <>
+        <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Country</th>
+        <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Region</th>
+        <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Year</th>
+        <th className="text-right p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Factor</th>
+        <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Unit</th>
+        <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Source</th>
+      </>
+    );
+  }
+  if (tab === 'fuel') {
+    return (
+      <>
+        <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Fuel Type</th>
+        <th className="text-right p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Factor</th>
+        <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Unit</th>
+        <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Scope</th>
+        <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Source</th>
+      </>
+    );
+  }
+  return (
+    <>
+      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Material</th>
+      <th className="text-right p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Factor</th>
+      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Unit</th>
+      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Category</th>
+      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Source</th>
+    </>
+  );
+}
+
+function factorCells(tab: FactorTab, factor: any) {
+  if (tab === 'grid') {
+    return (
+      <>
+        <td className="p-3 text-earth-800 dark:text-earth-100 font-medium">{factor.country}</td>
+        <td className="p-3 text-earth-600 dark:text-earth-300">{factor.region}</td>
+        <td className="p-3 text-earth-600 dark:text-earth-300">{factor.year}</td>
+        <td className="p-3 text-right font-mono text-grass-600 dark:text-grass-400">{factor.factor.toFixed(4)}</td>
+        <td className="p-3 text-earth-500 dark:text-earth-400 text-sm">{factor.unit}</td>
+        <td className="p-3"><Badge variant="default" size="sm">{factor.source}</Badge></td>
+      </>
+    );
+  }
+  if (tab === 'fuel') {
+    return (
+      <>
+        <td className="p-3 text-earth-800 dark:text-earth-100 font-medium">{factor.fuel}</td>
+        <td className="p-3 text-right font-mono text-grass-600 dark:text-grass-400">{factor.factor.toFixed(2)}</td>
+        <td className="p-3 text-earth-500 dark:text-earth-400 text-sm">{factor.unit}</td>
+        <td className="p-3"><Badge variant="grass" size="sm">{factor.scope}</Badge></td>
+        <td className="p-3"><Badge variant="default" size="sm">{factor.source}</Badge></td>
+      </>
+    );
+  }
+  return (
+    <>
+      <td className="p-3 text-earth-800 dark:text-earth-100 font-medium">{factor.material}</td>
+      <td className="p-3 text-right font-mono text-grass-600 dark:text-grass-400">{factor.factor.toFixed(2)}</td>
+      <td className="p-3 text-earth-500 dark:text-earth-400 text-sm">{factor.unit}</td>
+      <td className="p-3"><Badge variant="warning" size="sm">{factor.category}</Badge></td>
+      <td className="p-3"><Badge variant="default" size="sm">{factor.source}</Badge></td>
+    </>
+  );
+}
+
+function FactorTable({ tab, factors }: Readonly<{ tab: FactorTab; factors: any[] }>) {
+  return (
+    <Card variant="default">
+      <CardHeader title={FACTOR_TITLES[tab]} subtitle={`${factors.length} factors found`} />
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-grass-100 dark:border-earth-700">{factorHeadings(tab)}</tr>
+          </thead>
+          <tbody>
+            {factors.map((factor: any) => (
+              <tr
+                key={factor.id}
+                className="border-b border-grass-50 dark:border-earth-800 hover:bg-grass-50 dark:hover:bg-earth-800/50 transition-colors"
+              >
+                {factorCells(tab, factor)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
 export const EmissionFactors: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'grid' | 'fuel' | 'materials'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
@@ -145,7 +254,7 @@ export const EmissionFactors: React.FC = () => {
   const activeFuelFactors = apiFuelFactors.length > 0 ? apiFuelFactors : fuelFactors;
   const activeMaterialFactors = apiMaterialFactors.length > 0 ? apiMaterialFactors : materialFactors;
 
-  const currentFactors = activeTab === 'grid' ? activeGridFactors : activeTab === 'fuel' ? activeFuelFactors : activeMaterialFactors;
+  const currentFactors = factorsForTab(activeTab, activeGridFactors, activeFuelFactors, activeMaterialFactors);
 
   const filteredFactors = currentFactors.filter((f: any) => {
     const searchLower = searchTerm.toLowerCase();
@@ -274,93 +383,8 @@ export const EmissionFactors: React.FC = () => {
         </Card>
       </motion.div>
 
-      {/* Data Table */}
       <motion.div variants={item}>
-        <Card variant="default">
-          <CardHeader
-            title={activeTab === 'grid' ? 'Grid Emission Factors' : activeTab === 'fuel' ? 'Fuel Emission Factors' : 'Material Emission Factors'}
-            subtitle={`${filteredFactors.length} factors found`}
-          />
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-grass-100 dark:border-earth-700">
-                  {activeTab === 'grid' ? (
-                    <>
-                      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Country</th>
-                      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Region</th>
-                      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Year</th>
-                      <th className="text-right p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Factor</th>
-                      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Unit</th>
-                      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Source</th>
-                    </>
-                  ) : activeTab === 'fuel' ? (
-                    <>
-                      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Fuel Type</th>
-                      <th className="text-right p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Factor</th>
-                      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Unit</th>
-                      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Scope</th>
-                      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Source</th>
-                    </>
-                  ) : (
-                    <>
-                      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Material</th>
-                      <th className="text-right p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Factor</th>
-                      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Unit</th>
-                      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Category</th>
-                      <th className="text-left p-3 text-sm font-medium text-earth-600 dark:text-earth-400">Source</th>
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredFactors.map((f: any) => (
-                  <tr
-                    key={f.id}
-                    className="border-b border-grass-50 dark:border-earth-800 hover:bg-grass-50 dark:hover:bg-earth-800/50 transition-colors"
-                  >
-                    {activeTab === 'grid' ? (
-                      <>
-                        <td className="p-3 text-earth-800 dark:text-earth-100 font-medium">{f.country}</td>
-                        <td className="p-3 text-earth-600 dark:text-earth-300">{f.region}</td>
-                        <td className="p-3 text-earth-600 dark:text-earth-300">{f.year}</td>
-                        <td className="p-3 text-right font-mono text-grass-600 dark:text-grass-400">{f.factor.toFixed(4)}</td>
-                        <td className="p-3 text-earth-500 dark:text-earth-400 text-sm">{f.unit}</td>
-                        <td className="p-3">
-                          <Badge variant="default" size="sm">{f.source}</Badge>
-                        </td>
-                      </>
-                    ) : activeTab === 'fuel' ? (
-                      <>
-                        <td className="p-3 text-earth-800 dark:text-earth-100 font-medium">{f.fuel}</td>
-                        <td className="p-3 text-right font-mono text-grass-600 dark:text-grass-400">{f.factor.toFixed(2)}</td>
-                        <td className="p-3 text-earth-500 dark:text-earth-400 text-sm">{f.unit}</td>
-                        <td className="p-3">
-                          <Badge variant="grass" size="sm">{f.scope}</Badge>
-                        </td>
-                        <td className="p-3">
-                          <Badge variant="default" size="sm">{f.source}</Badge>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="p-3 text-earth-800 dark:text-earth-100 font-medium">{f.material}</td>
-                        <td className="p-3 text-right font-mono text-grass-600 dark:text-grass-400">{f.factor.toFixed(2)}</td>
-                        <td className="p-3 text-earth-500 dark:text-earth-400 text-sm">{f.unit}</td>
-                        <td className="p-3">
-                          <Badge variant="warning" size="sm">{f.category}</Badge>
-                        </td>
-                        <td className="p-3">
-                          <Badge variant="default" size="sm">{f.source}</Badge>
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <FactorTable tab={activeTab} factors={filteredFactors} />
       </motion.div>
     </motion.div>
   );

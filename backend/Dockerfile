@@ -18,9 +18,8 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Build TypeScript (ignore type errors, just transpile)
-RUN npx tsc -p tsconfig.build.json 2>/dev/null; exit 0
-RUN test -f dist/server.js || npx esbuild src/server.ts --bundle --platform=node --outdir=dist --format=cjs --packages=external
+# Bundle CommonJS for Node. The typecheck config uses ES2022 + bundler resolution.
+RUN npx esbuild src/server.ts --bundle --platform=node --outfile=dist/server.js --format=cjs --packages=external
 
 # Prune dev dependencies
 RUN npm prune --production

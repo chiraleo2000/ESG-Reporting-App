@@ -39,3 +39,6 @@ coverage/
 # Cache
 .cache/
 *.tsbuildinfo
+
+# Security scan reports (keep security/README.md and scripts)
+security/reports/

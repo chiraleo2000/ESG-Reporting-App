@@ -1,0 +1,189 @@
+openapi: 3.0.3
+info:
+  title: ESG Reporting API
+  description: Minimal OpenAPI surface for OWASP ZAP API scans (not a full product spec).
+  version: 1.0.0
+servers:
+  - url: http://backend:2047/api/v1
+    description: Compose network (ZAP container joined to esg-network)
+  - url: http://host.docker.internal:2047/api/v1
+    description: Host-published backend from Docker Desktop
+paths:
+  /:
+    get:
+      summary: API version info
+      responses:
+        "200":
+          description: OK
+  /auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  example: admin@esgdemo.com
+                password:
+                  type: string
+                  example: Demo@123
+      responses:
+        "200":
+          description: Tokens or MFA challenge
+        "401":
+          description: Invalid credentials
+  /auth/register:
+    post:
+      summary: Register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Validation error
+  /auth/refresh:
+    post:
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        "200":
+          description: New tokens
+        "401":
+          description: Invalid refresh token
+  /projects:
+    get:
+      summary: List projects
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Project list
+        "401":
+          description: Unauthorized
+    post:
+      summary: Create project
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        "201":
+          description: Created
+        "401":
+          description: Unauthorized
+  /projects/{projectId}:
+    get:
+      summary: Get project
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/projectId"
+      responses:
+        "200":
+          description: Project
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+  /projects/{projectId}/activities:
+    get:
+      summary: List activities
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/projectId"
+      responses:
+        "200":
+          description: Activities
+        "401":
+          description: Unauthorized
+  /audit-logs:
+    get:
+      summary: List audit logs
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Logs
+        "401":
+          description: Unauthorized
+  /data-sources/{projectId}:
+    get:
+      summary: List data sources
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/projectId"
+      responses:
+        "200":
+          description: Data sources
+        "401":
+          description: Unauthorized
+  /reports/generate:
+    post:
+      summary: Generate report
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                projectId:
+                  type: string
+                standard:
+                  type: string
+      responses:
+        "200":
+          description: Report
+        "401":
+          description: Unauthorized
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    projectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid

@@ -129,6 +129,255 @@ interface Project {
   organization?: string;
 }
 
+function emptyActivityDescription(activityCount: number): string {
+  return activityCount === 0
+    ? 'Add your first activity to start tracking emissions'
+    : 'Try adjusting your search or filters';
+}
+
+function ActivitySummary({
+  projectId,
+  totalEmissions,
+  activityCount,
+  calculatedCount,
+  saving,
+  onCalculateAll,
+}: Readonly<{
+  projectId: string;
+  totalEmissions: number;
+  activityCount: number;
+  calculatedCount: number;
+  saving: boolean;
+  onCalculateAll: () => void;
+}>) {
+  if (!projectId) return null;
+  return (
+    <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <Card variant="default" padding="sm">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-grass-100 dark:bg-earth-700 flex items-center justify-center">
+            <Leaf className="w-5 h-5 text-grass-600 dark:text-grass-400" />
+          </div>
+          <div>
+            <p className="text-sm text-earth-500 dark:text-earth-400">Total Emissions</p>
+            <p className="text-xl font-bold text-earth-800 dark:text-earth-100">
+              {(totalEmissions / 1000).toFixed(2)} <span className="text-sm font-normal">tCO₂e</span>
+            </p>
+          </div>
+        </div>
+      </Card>
+      <Card variant="default" padding="sm">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            <Factory className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          </div>
+          <div>
+            <p className="text-sm text-earth-500 dark:text-earth-400">Total Activities</p>
+            <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{activityCount}</p>
+          </div>
+        </div>
+      </Card>
+      <Card variant="default" padding="sm">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+          </div>
+          <div>
+            <p className="text-sm text-earth-500 dark:text-earth-400">Calculated</p>
+            <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{calculatedCount}</p>
+          </div>
+        </div>
+      </Card>
+      <Card variant="default" padding="sm">
+        <Button
+          variant="primary"
+          className="w-full h-full"
+          onClick={onCalculateAll}
+          disabled={saving || activityCount === 0}
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4" />}
+          Calculate All Emissions
+        </Button>
+      </Card>
+    </motion.div>
+  );
+}
+
+function ActivityTableBody({
+  loading,
+  selectedProjectId,
+  filteredActivities,
+  activityCount,
+  selectedActivities,
+  onToggleAll,
+  onToggle,
+  getIcon,
+  onEdit,
+  onDelete,
+}: Readonly<{
+  loading: boolean;
+  selectedProjectId: string;
+  filteredActivities: Activity[];
+  activityCount: number;
+  selectedActivities: string[];
+  onToggleAll: () => void;
+  onToggle: (id: string) => void;
+  getIcon: (type: string) => React.ComponentType<{ className?: string }>;
+  onEdit: (activity: Activity) => void;
+  onDelete: (id: string) => void;
+}>) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-grass-600" />
+        <span className="ml-2 text-earth-500">Loading activities...</span>
+      </div>
+    );
+  }
+  if (!selectedProjectId) {
+    return (
+      <div className="text-center py-12">
+        <Building2 className="w-12 h-12 mx-auto text-earth-400 mb-4" />
+        <h3 className="text-lg font-medium text-earth-700 dark:text-earth-300 mb-2">Select a Project</h3>
+        <p className="text-earth-500">Choose a project to view and manage activities</p>
+      </div>
+    );
+  }
+  return (
+    <Table variant="default">
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-12">
+            <Checkbox
+              checked={selectedActivities.length === filteredActivities.length && filteredActivities.length > 0}
+              onChange={onToggleAll}
+            />
+          </TableHead>
+          <TableHead sortable>Activity</TableHead>
+          <TableHead sortable>Type</TableHead>
+          <TableHead sortable>Value</TableHead>
+          <TableHead sortable>Scope</TableHead>
+          <TableHead sortable>Emissions</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead className="w-12">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {filteredActivities.length === 0 ? (
+          <TableEmpty
+            icon={<Leaf className="w-12 h-12" />}
+            title="No activities found"
+            description={emptyActivityDescription(activityCount)}
+            colSpan={8}
+          />
+        ) : (
+          filteredActivities.map((activity) => (
+            <ActivityRow
+              key={activity.id}
+              activity={activity}
+              selected={selectedActivities.includes(activity.id)}
+              Icon={getIcon(activity.activityType)}
+              onToggle={onToggle}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          ))
+        )}
+      </TableBody>
+    </Table>
+  );
+}
+
+function ActivityRow({
+  activity,
+  selected,
+  Icon,
+  onToggle,
+  onEdit,
+  onDelete,
+}: Readonly<{
+  activity: Activity;
+  selected: boolean;
+  Icon: React.ComponentType<{ className?: string }>;
+  onToggle: (id: string) => void;
+  onEdit: (activity: Activity) => void;
+  onDelete: (id: string) => void;
+}>) {
+  return (
+    <TableRow>
+      <TableCell>
+        <Checkbox checked={selected} onChange={() => onToggle(activity.id)} />
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-grass-100 dark:bg-earth-700 flex items-center justify-center">
+            <Icon className="w-4 h-4 text-grass-600 dark:text-grass-400" />
+          </div>
+          <div>
+            <p className="font-medium text-earth-800 dark:text-earth-100">{activity.name}</p>
+            {activity.description && (
+              <p className="text-xs text-earth-500 line-clamp-1">{activity.description}</p>
+            )}
+          </div>
+        </div>
+      </TableCell>
+      <TableCell>
+        <span className="text-sm text-earth-600 dark:text-earth-400 capitalize">
+          {activity.activityType.replace(/_/g, ' ')}
+        </span>
+      </TableCell>
+      <TableCell>
+        <span className="font-medium text-earth-800 dark:text-earth-100">{activity.quantity.toLocaleString()}</span>
+        <span className="text-sm text-earth-500 ml-1">{activity.unit}</span>
+      </TableCell>
+      <TableCell>
+        <ScopeBadge scope={activity.scope} />
+      </TableCell>
+      <TableCell>
+        <ActivityEmissions kilograms={activity.totalEmissionsKgCo2e} />
+      </TableCell>
+      <TableCell>
+        <ActivityStatus status={activity.calculationStatus} />
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-1">
+          <IconButton icon={<Edit className="w-4 h-4" />} variant="ghost" size="sm" onClick={() => onEdit(activity)} />
+          <IconButton icon={<Trash2 className="w-4 h-4" />} variant="ghost" size="sm" onClick={() => onDelete(activity.id)} />
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function ActivityEmissions({ kilograms }: Readonly<{ kilograms?: number }>) {
+  if (!kilograms) {
+    return <span className="text-earth-400">—</span>;
+  }
+  return (
+    <>
+      <span className="font-medium text-grass-600 dark:text-grass-400">{(kilograms / 1000).toFixed(4)}</span>
+      <span className="text-xs text-earth-500 ml-1">tCO₂e</span>
+    </>
+  );
+}
+
+function statusVariant(status: string): 'grass' | 'error' | 'default' {
+  if (status === 'calculated') return 'grass';
+  if (status === 'error') return 'error';
+  return 'default';
+}
+
+function ActivityStatus({ status }: Readonly<{ status: string }>) {
+  return (
+    <Badge variant={statusVariant(status)}>
+      {status === 'calculated' && <CheckCircle className="w-3 h-3" />}
+      {status === 'pending' && <Clock className="w-3 h-3" />}
+      {status === 'error' && <AlertCircle className="w-3 h-3" />}
+      {status}
+    </Badge>
+  );
+}
+
 export const Activities: React.FC = () => {
   // State
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -541,57 +790,14 @@ export const Activities: React.FC = () => {
         </motion.div>
       )}
 
-      {/* Summary Stats */}
-      {selectedProjectId && (
-        <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card variant="default" padding="sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-grass-100 dark:bg-earth-700 flex items-center justify-center">
-                <Leaf className="w-5 h-5 text-grass-600 dark:text-grass-400" />
-              </div>
-              <div>
-                <p className="text-sm text-earth-500 dark:text-earth-400">Total Emissions</p>
-                <p className="text-xl font-bold text-earth-800 dark:text-earth-100">
-                  {(totalEmissions / 1000).toFixed(2)} <span className="text-sm font-normal">tCO₂e</span>
-                </p>
-              </div>
-            </div>
-          </Card>
-          <Card variant="default" padding="sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                <Factory className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <p className="text-sm text-earth-500 dark:text-earth-400">Total Activities</p>
-                <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{activities.length}</p>
-              </div>
-            </div>
-          </Card>
-          <Card variant="default" padding="sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <p className="text-sm text-earth-500 dark:text-earth-400">Calculated</p>
-                <p className="text-xl font-bold text-earth-800 dark:text-earth-100">{calculatedCount}</p>
-              </div>
-            </div>
-          </Card>
-          <Card variant="default" padding="sm">
-            <Button
-              variant="primary"
-              className="w-full h-full"
-              onClick={handleCalculateAll}
-              disabled={saving || activities.length === 0}
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4" />}
-              Calculate All Emissions
-            </Button>
-          </Card>
-        </motion.div>
-      )}
+      <ActivitySummary
+        projectId={selectedProjectId}
+        totalEmissions={totalEmissions}
+        activityCount={activities.length}
+        calculatedCount={calculatedCount}
+        saving={saving}
+        onCalculateAll={handleCalculateAll}
+      />
 
       {/* Activity Type Quick Stats */}
       <motion.div variants={item}>
@@ -684,145 +890,18 @@ export const Activities: React.FC = () => {
                 </div>
               )}
 
-              {/* Loading State */}
-              {loading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-8 h-8 animate-spin text-grass-600" />
-                  <span className="ml-2 text-earth-500">Loading activities...</span>
-                </div>
-              ) : !selectedProjectId ? (
-                <div className="text-center py-12">
-                  <Building2 className="w-12 h-12 mx-auto text-earth-400 mb-4" />
-                  <h3 className="text-lg font-medium text-earth-700 dark:text-earth-300 mb-2">
-                    Select a Project
-                  </h3>
-                  <p className="text-earth-500">Choose a project to view and manage activities</p>
-                </div>
-              ) : (
-                /* Table */
-                <Table variant="default">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">
-                        <Checkbox
-                          checked={
-                            selectedActivities.length === filteredActivities.length &&
-                            filteredActivities.length > 0
-                          }
-                          onChange={toggleSelectAll}
-                        />
-                      </TableHead>
-                      <TableHead sortable>Activity</TableHead>
-                      <TableHead sortable>Type</TableHead>
-                      <TableHead sortable>Value</TableHead>
-                      <TableHead sortable>Scope</TableHead>
-                      <TableHead sortable>Emissions</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-12">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredActivities.length === 0 ? (
-                      <TableEmpty
-                        icon={<Leaf className="w-12 h-12" />}
-                        title="No activities found"
-                        description={activities.length === 0 ? "Add your first activity to start tracking emissions" : "Try adjusting your search or filters"}
-                        colSpan={8}
-                      />
-                    ) : (
-                      filteredActivities.map((activity) => {
-                        const Icon = getIcon(activity.activityType);
-                        return (
-                          <TableRow key={activity.id}>
-                            <TableCell>
-                              <Checkbox
-                                checked={selectedActivities.includes(activity.id)}
-                                onChange={() => toggleActivity(activity.id)}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-lg bg-grass-100 dark:bg-earth-700 flex items-center justify-center">
-                                  <Icon className="w-4 h-4 text-grass-600 dark:text-grass-400" />
-                                </div>
-                                <div>
-                                  <p className="font-medium text-earth-800 dark:text-earth-100">
-                                    {activity.name}
-                                  </p>
-                                  {activity.description && (
-                                    <p className="text-xs text-earth-500 line-clamp-1">
-                                      {activity.description}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-sm text-earth-600 dark:text-earth-400 capitalize">
-                                {activity.activityType.replace(/_/g, ' ')}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <span className="font-medium text-earth-800 dark:text-earth-100">
-                                {activity.quantity.toLocaleString()}
-                              </span>
-                              <span className="text-sm text-earth-500 ml-1">
-                                {activity.unit}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <ScopeBadge scope={activity.scope} />
-                            </TableCell>
-                            <TableCell>
-                              {activity.totalEmissionsKgCo2e ? (
-                                <>
-                                  <span className="font-medium text-grass-600 dark:text-grass-400">
-                                    {(activity.totalEmissionsKgCo2e / 1000).toFixed(4)}
-                                  </span>
-                                  <span className="text-xs text-earth-500 ml-1">
-                                    tCO₂e
-                                  </span>
-                                </>
-                              ) : (
-                                <span className="text-earth-400">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  activity.calculationStatus === 'calculated' ? 'grass' :
-                                  activity.calculationStatus === 'error' ? 'error' : 'default'
-                                }
-                              >
-                                {activity.calculationStatus === 'calculated' && <CheckCircle className="w-3 h-3" />}
-                                {activity.calculationStatus === 'pending' && <Clock className="w-3 h-3" />}
-                                {activity.calculationStatus === 'error' && <AlertCircle className="w-3 h-3" />}
-                                {activity.calculationStatus}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-1">
-                                <IconButton
-                                  icon={<Edit className="w-4 h-4" />}
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => openEditModal(activity)}
-                                />
-                                <IconButton
-                                  icon={<Trash2 className="w-4 h-4" />}
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteActivity(activity.id)}
-                                />
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              )}
+              <ActivityTableBody
+                loading={loading}
+                selectedProjectId={selectedProjectId}
+                filteredActivities={filteredActivities}
+                activityCount={activities.length}
+                selectedActivities={selectedActivities}
+                onToggleAll={toggleSelectAll}
+                onToggle={toggleActivity}
+                getIcon={getIcon}
+                onEdit={openEditModal}
+                onDelete={handleDeleteActivity}
+              />
             </TabsContent>
           </Tabs>
         </Card>

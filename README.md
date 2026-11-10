@@ -255,6 +255,12 @@ docker compose up -d
 
 ## Changelog
 
+### v0.4.0 (2026-11-10)
+
+- Role checks, TOTP multi-factor sign-in, and a security alerts view
+- TypeScript 6 settings: dropped deprecated `baseUrl` and `moduleResolution: node`
+- Split the functions Sonar flagged for cognitive complexity
+
 ### v0.3.0 (2026-10-04)
 
 - Large main tabs replace the nested sidebar, with a project switcher in the header

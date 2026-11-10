@@ -321,8 +321,8 @@ export async function revokeSignature(req: Request, res: Response): Promise<void
 
   const signature = signatureResult.rows[0];
 
-  // Check if already revoked
-  if (signature.revoked_at) {
+  // Schema stores revocation in revoked_at. Also honor is_revoked when present.
+  if (signature.revoked_at || signature.is_revoked) {
     throw new BadRequestError('Signature is already revoked');
   }
 

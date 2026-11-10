@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
+    "module": "ES2022",
     "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": ".",
@@ -12,20 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "sourceMap": true,
-    "moduleResolution": "node",
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"],
-      "@controllers/*": ["src/controllers/*"],
-      "@services/*": ["src/services/*"],
-      "@models/*": ["src/models/*"],
-      "@routes/*": ["src/routes/*"],
-      "@middleware/*": ["src/middleware/*"],
-      "@utils/*": ["src/utils/*"],
-      "@config/*": ["src/config/*"],
-      "@types/*": ["src/types/*"],
-      "@standards/*": ["src/standards/*"]
-    },
+    "moduleResolution": "bundler",
     "types": ["node", "jest"]
   },
   "include": ["src/**/*", "tests/**/*"],

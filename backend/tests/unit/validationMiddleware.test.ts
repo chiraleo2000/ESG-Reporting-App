@@ -70,31 +70,49 @@ describe('Validation Middleware', () => {
       }));
     });
 
-    it('should validate query params', () => {
+    it('should validate query params and keep Express string types', () => {
       const middleware = validate(paginationSchema, 'query');
-      const req = mockRequest({ query: { page: '2', limit: '10' } });
+      const query = { page: '2', limit: '10' };
+      const req = mockRequest();
+      Object.defineProperty(req, 'query', {
+        configurable: true,
+        enumerable: true,
+        get: () => query,
+      });
       const res = mockResponse();
       const next = jest.fn();
 
       middleware(req, res, next);
 
       expect(next).toHaveBeenCalledWith();
-      expect(req.query.page).toBe(2);
-      expect(req.query.limit).toBe(10);
+      expect(req.query.page).toBe('2');
+      expect(req.query.limit).toBe('10');
+      expect(typeof req.query.page).toBe('string');
+      expect(typeof req.query.limit).toBe('string');
     });
 
-    it('should apply defaults from pagination schema', () => {
+    it('should leave query defaults to handlers when page and limit are omitted', () => {
       const middleware = validate(paginationSchema, 'query');
-      const req = mockRequest({ query: {} });
+      const query: Record<string, string> = {};
+      const req = mockRequest();
+      Object.defineProperty(req, 'query', {
+        configurable: true,
+        enumerable: true,
+        get: () => query,
+      });
       const res = mockResponse();
       const next = jest.fn();
 
       middleware(req, res, next);
 
       expect(next).toHaveBeenCalledWith();
-      expect(req.query.page).toBe(1);
-      expect(req.query.limit).toBe(20);
-      expect(req.query.sortOrder).toBe('desc');
+      // Controllers use `page = 1` and `limit = 20` (or 50) when these are absent.
+      expect(req.query.page).toBeUndefined();
+      expect(req.query.limit).toBeUndefined();
+      const parsed = paginationSchema.parse({});
+      expect(parsed.page).toBe(1);
+      expect(parsed.limit).toBe(20);
+      expect(parsed.sortOrder).toBe('desc');
     });
   });
 
@@ -490,7 +508,7 @@ describe('Validation Middleware', () => {
     it('should accept valid registration', () => {
       const result = registerSchema.safeParse({
         email: 'new@user.com',
-        password: 'strong123',
+        password: 'StrongPass1!',
         name: 'New User',
       });
       expect(result.success).toBe(true);

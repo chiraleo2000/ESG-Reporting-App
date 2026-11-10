@@ -3,18 +3,20 @@
 # =============================================================================
 # UI:  http://localhost:2048
 # API: http://localhost:2047
+# Secrets: copy .env.example → .env (never commit real secrets)
 # =============================================================================
 
 services:
-  # PostgreSQL Database with pgvector
   postgres:
     image: pgvector/pgvector:pg16
     container_name: esg-postgres
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres123
-      POSTGRES_DB: esg_reporting
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-esg_reporting}
     ports:
       - "5434:5432"
     volumes:
@@ -23,14 +25,13 @@ services:
       - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
       - ./database/seed-sugar-factory.sql:/docker-entrypoint-initdb.d/03-seed-sugar-factory.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d esg_reporting"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - esg-network
 
-  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: esg-redis
@@ -48,7 +49,6 @@ services:
     networks:
       - esg-network
 
-  # Backend API - Port 2047
   backend:
     build:
       context: ./backend
@@ -56,22 +56,21 @@ services:
       target: production
     container_name: esg-backend
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       PORT: 2047
       HOST: 0.0.0.0
-      DATABASE_URL: postgresql://postgres:postgres123@postgres:5432/esg_reporting
-      DATABASE_HOST: postgres
-      DATABASE_PORT: 5432
-      DATABASE_NAME: esg_reporting
-      DATABASE_USER: postgres
-      DATABASE_PASSWORD: postgres123
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-esg_reporting}
       REDIS_URL: redis://redis:6379
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      JWT_SECRET: esg_jwt_secret_production_change_this
-      JWT_EXPIRES_IN: 24h
-      CORS_ORIGIN: http://localhost:2048
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in .env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:2048}
+      TRUST_PROXY: "1"
     ports:
       - "2047:2047"
     volumes:
@@ -91,7 +90,6 @@ services:
     networks:
       - esg-network
 
-  # Frontend UI - Port 2048
   frontend:
     build:
       context: ./frontend

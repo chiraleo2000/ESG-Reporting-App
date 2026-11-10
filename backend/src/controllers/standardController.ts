@@ -469,6 +469,6 @@ function getRecommendedWorkflow(standard1: string, standard2: string): string {
     'eu_cbam-china_carbon': 'Different focus areas. EU CBAM for imports, China for domestic. May need separate data collection.',
   };
 
-  const key = [standard1, standard2].sort().join('-');
+  const key = [standard1, standard2].sort((a, b) => a.localeCompare(b)).join('-');
   return workflows[key] || 'Enter common data first, then add standard-specific fields for each report.';
 }

@@ -1,60 +1,63 @@
 /**
- * Data Source Routes
- * 
- * Routes for managing external data source connections
- * (REST API, SSH/SFTP, file upload).
+ * Data Source Routes — authorized by project membership role
  */
-
 import { Router } from 'express';
-import { authenticate, authorize } from '../middleware/auth';
+import {
+  authenticate,
+  authorizeProjectMember,
+  requireMfaCompleted,
+} from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
+import { validate, dataSourceFilterSchema } from '../middleware/validation';
 import * as dataSourceController from '../controllers/dataSourceController';
 
 const router = Router();
 
-// All routes require authentication
 router.use(authenticate);
 
-// Test connection (no project context needed)
 router.post(
   '/test-connection',
-  authorize('owner', 'director', 'editor'),
   asyncHandler(dataSourceController.testConnection)
 );
 
-// Project-scoped data source routes
 router.post(
   '/:projectId',
-  authorize('owner', 'director', 'editor'),
+  authorizeProjectMember('editor', 'projectId'),
+  requireMfaCompleted,
   asyncHandler(dataSourceController.createDataSource)
 );
 
 router.get(
   '/:projectId',
+  authorizeProjectMember('viewer', 'projectId'),
+  validate(dataSourceFilterSchema, 'query'),
   asyncHandler(dataSourceController.getDataSources)
 );
 
 router.get(
   '/:projectId/:id',
+  authorizeProjectMember('viewer', 'projectId'),
+  requireMfaCompleted,
   asyncHandler(dataSourceController.getDataSource)
 );
 
 router.put(
   '/:projectId/:id',
-  authorize('owner', 'director', 'editor'),
+  authorizeProjectMember('editor', 'projectId'),
+  requireMfaCompleted,
   asyncHandler(dataSourceController.updateDataSource)
 );
 
 router.delete(
   '/:projectId/:id',
-  authorize('owner', 'director'),
+  authorizeProjectMember('director', 'projectId'),
+  requireMfaCompleted,
   asyncHandler(dataSourceController.deleteDataSource)
 );
 
-// Trigger sync
 router.post(
   '/:projectId/:id/sync',
-  authorize('owner', 'director', 'editor'),
+  authorizeProjectMember('editor', 'projectId'),
   asyncHandler(dataSourceController.triggerSync)
 );
 

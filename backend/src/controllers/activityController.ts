@@ -105,7 +105,7 @@ export async function createActivity(req: Request, res: Response): Promise<void>
  */
 export async function getActivities(req: Request, res: Response): Promise<void> {
   const { projectId } = (req.params as Record<string, string>);
-  const { page = 1, limit = 50, scope, status, search } = req.query;
+  const { page = 1, limit = 50, scope, status, search, category, tier, direction } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 
   let whereClause = 'WHERE project_id = $1';
@@ -127,6 +127,24 @@ export async function getActivities(req: Request, res: Response): Promise<void> 
   if (search) {
     whereClause += ` AND (name ILIKE $${paramIndex} OR description ILIKE $${paramIndex})`;
     params.push(`%${search}%`);
+    paramIndex++;
+  }
+
+  if (category) {
+    whereClause += ` AND (scope3_category = $${paramIndex} OR activity_type ILIKE $${paramIndex})`;
+    params.push(String(category));
+    paramIndex++;
+  }
+
+  if (tier) {
+    whereClause += ` AND tier_level = $${paramIndex}`;
+    params.push(tier);
+    paramIndex++;
+  }
+
+  if (direction) {
+    whereClause += ` AND tier_direction = $${paramIndex}`;
+    params.push(direction);
     paramIndex++;
   }
 
@@ -162,18 +180,20 @@ export async function getActivities(req: Request, res: Response): Promise<void> 
  * Get a single activity
  */
 export async function getActivity(req: Request, res: Response): Promise<void> {
-  const { projectId, activityId } = (req.params as Record<string, string>);
+  const activityId = (req.params as Record<string, string>).id || (req.params as Record<string, string>).activityId;
+  const projectId = req.projectId || (req.params as Record<string, string>).projectId;
 
   const result = await db.query(
-    `SELECT * FROM activities WHERE id = $1 AND project_id = $2`,
-    [activityId, projectId]
+    projectId
+      ? `SELECT * FROM activities WHERE id = $1 AND project_id = $2`
+      : `SELECT * FROM activities WHERE id = $1`,
+    projectId ? [activityId, projectId] : [activityId]
   );
 
   if (result.rows.length === 0) {
     throw new NotFoundError('Activity not found');
   }
 
-  // Get associated precursor calculations if any
   const precursors = await db.query(
     `SELECT * FROM precursor_calculations WHERE activity_id = $1`,
     [activityId]
@@ -192,7 +212,8 @@ export async function getActivity(req: Request, res: Response): Promise<void> {
  * Update an activity
  */
 export async function updateActivity(req: Request, res: Response): Promise<void> {
-  const { projectId, activityId } = (req.params as Record<string, string>);
+  const activityId = (req.params as Record<string, string>).id || (req.params as Record<string, string>).activityId;
+  const projectId = req.projectId || (req.params as Record<string, string>).projectId;
   const userId = req.user!.id;
   const updates = req.body;
 
@@ -244,20 +265,32 @@ export async function updateActivity(req: Request, res: Response): Promise<void>
 
   updateFields.push(`updated_at = NOW()`);
 
-  params.push(activityId, projectId);
-  const result = await db.query(
-    `UPDATE activities SET ${updateFields.join(', ')}
-     WHERE id = $${paramIndex} AND project_id = $${paramIndex + 1}
-     RETURNING *`,
-    params
-  );
+  let result;
+  if (projectId) {
+    params.push(activityId, projectId);
+    result = await db.query(
+      `UPDATE activities SET ${updateFields.join(', ')}
+       WHERE id = $${paramIndex} AND project_id = $${paramIndex + 1}
+       RETURNING *`,
+      params
+    );
+  } else {
+    params.push(activityId);
+    result = await db.query(
+      `UPDATE activities SET ${updateFields.join(', ')}
+       WHERE id = $${paramIndex}
+       RETURNING *`,
+      params
+    );
+  }
 
   if (result.rows.length === 0) {
     throw new NotFoundError('Activity not found');
   }
 
-  await logAudit(userId, 'UPDATE', 'activity', activityId, updates, projectId);
-  await redis.del(redis.keys.projectActivities(projectId));
+  const resolvedProjectId = projectId || result.rows[0].project_id;
+  await logAudit(userId, 'UPDATE', 'activity', activityId, updates, resolvedProjectId);
+  await redis.del(redis.keys.projectActivities(resolvedProjectId));
 
   res.json({
     success: true,
@@ -269,20 +302,24 @@ export async function updateActivity(req: Request, res: Response): Promise<void>
  * Delete an activity
  */
 export async function deleteActivity(req: Request, res: Response): Promise<void> {
-  const { projectId, activityId } = (req.params as Record<string, string>);
+  const activityId = (req.params as Record<string, string>).id || (req.params as Record<string, string>).activityId;
+  const projectId = req.projectId || (req.params as Record<string, string>).projectId;
   const userId = req.user!.id;
 
   const result = await db.query(
-    `DELETE FROM activities WHERE id = $1 AND project_id = $2 RETURNING id, name`,
-    [activityId, projectId]
+    projectId
+      ? `DELETE FROM activities WHERE id = $1 AND project_id = $2 RETURNING id, name, project_id`
+      : `DELETE FROM activities WHERE id = $1 RETURNING id, name, project_id`,
+    projectId ? [activityId, projectId] : [activityId]
   );
 
   if (result.rows.length === 0) {
     throw new NotFoundError('Activity not found');
   }
 
-  await logAudit(userId, 'DELETE', 'activity', activityId, { name: result.rows[0].name }, projectId);
-  await redis.del(redis.keys.projectActivities(projectId));
+  const resolvedProjectId = result.rows[0].project_id;
+  await logAudit(userId, 'DELETE', 'activity', activityId, { name: result.rows[0].name }, resolvedProjectId);
+  await redis.del(redis.keys.projectActivities(resolvedProjectId));
 
   res.json({
     success: true,

@@ -1,6 +1,6 @@
 {
   "name": "@esg-app/frontend",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "ESG Reporting App - Frontend Dashboard",
   "engines": {
@@ -36,6 +36,7 @@
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "@vitest/coverage-v8": "^5.0.3",
     "eslint": "^8.56.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",

@@ -22,6 +22,7 @@ const Analytics = lazy(() => import('@/pages/Analytics').then((module) => ({ def
 const Calculations = lazy(() => import('@/pages/Calculations').then((module) => ({ default: module.Calculations })));
 const ESGGoals = lazy(() => import('@/pages/ESGGoals').then((module) => ({ default: module.ESGGoals })));
 const HelpGuide = lazy(() => import('@/pages/HelpGuide').then((module) => ({ default: module.HelpGuide })));
+const SecurityAlerts = lazy(() => import('@/pages/SecurityAlerts').then((module) => ({ default: module.SecurityAlerts })));
 
 // Protected Route wrapper
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -42,6 +43,15 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     return <Navigate to="/dashboard" replace />;
   }
   
+  return <>{children}</>;
+};
+
+const OwnerRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const user = useAppStore((state) => state.user);
+  const role = user?.role?.toLowerCase();
+  if (role !== 'owner' && role !== 'admin') {
+    return <Navigate to="/dashboard" replace />;
+  }
   return <>{children}</>;
 };
 
@@ -107,6 +117,7 @@ const App: React.FC = () => {
             <Route path="emission-factors" element={<EmissionFactors />} />
             <Route path="signatures" element={<Signatures />} />
             <Route path="audit-log" element={<AuditLog />} />
+            <Route path="security" element={<OwnerRoute><SecurityAlerts /></OwnerRoute>} />
             <Route path="import" element={<DataImport />} />
             <Route path="export" element={<DataExport />} />
             <Route path="connect" element={<DataSources />} />

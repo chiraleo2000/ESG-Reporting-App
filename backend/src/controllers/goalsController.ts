@@ -551,6 +551,47 @@ export async function getGoalsSummary(req: Request, res: Response): Promise<void
   });
 }
 
+function goalProgress(goal: any, currentEmissions: number) {
+  let currentValue = currentEmissions;
+  if (goal.target_unit === 'tCO2e') currentValue = currentEmissions / 1000;
+  const baselineValue = Number.parseFloat(goal.baseline_value) || 0;
+  const targetValue = Number.parseFloat(goal.target_value) || 0;
+  let progressPercentage = 0;
+  if (goal.target_type === 'absolute' && baselineValue !== targetValue) {
+    progressPercentage = ((baselineValue - currentValue) / (baselineValue - targetValue)) * 100;
+  } else if (goal.target_type === 'percentage' && baselineValue > 0) {
+    const reductionPct = ((baselineValue - currentValue) / baselineValue) * 100;
+    progressPercentage = (reductionPct / targetValue) * 100;
+  }
+  return {
+    currentValue,
+    progressPercentage: Math.min(100, Math.max(0, roundTo(progressPercentage, 2))),
+  };
+}
+
+function goalStatus(progressPercentage: number, currentStatus: string): string {
+  if (progressPercentage >= 100) return 'achieved';
+  if (progressPercentage >= 70) return 'on_track';
+  if (progressPercentage >= 40) return 'at_risk';
+  if (progressPercentage > 0) return 'behind';
+  return currentStatus;
+}
+
+async function emissionsForGoal(projectId: string, goal: any): Promise<number> {
+  let emissionsQuery = `
+    SELECT SUM(total_emissions_kg_co2e) as total
+    FROM activities
+    WHERE project_id = $1 AND calculation_status = 'calculated'
+  `;
+  const queryParams: any[] = [projectId];
+  if (goal.scope && goal.scope !== 'all') {
+    emissionsQuery += ` AND scope = $2`;
+    queryParams.push(goal.scope);
+  }
+  const emissionsResult = await db.query(emissionsQuery, queryParams);
+  return Number.parseFloat(emissionsResult.rows[0]?.total) || 0;
+}
+
 /**
  * Bulk update goal progress for all goals in a project
  */
@@ -569,45 +610,9 @@ export async function bulkUpdateProgress(req: Request, res: Response): Promise<v
 
   for (const goal of goalsResult.rows) {
     try {
-      // Calculate current emissions for this goal's scope
-      let emissionsQuery = `
-        SELECT SUM(total_emissions_kg_co2e) as total
-        FROM activities
-        WHERE project_id = $1 AND calculation_status = 'calculated'
-      `;
-      const queryParams: any[] = [projectId];
-
-      if (goal.scope && goal.scope !== 'all') {
-        emissionsQuery += ` AND scope = $2`;
-        queryParams.push(goal.scope);
-      }
-
-      const emissionsResult = await db.query(emissionsQuery, queryParams);
-      const currentEmissions = Number.parseFloat(emissionsResult.rows[0]?.total) || 0;
-
-      let currentValue = currentEmissions;
-      if (goal.target_unit === 'tCO2e') {
-        currentValue = currentEmissions / 1000;
-      }
-
-      const baselineValue = Number.parseFloat(goal.baseline_value) || 0;
-      const targetValue = Number.parseFloat(goal.target_value) || 0;
-      let progressPercentage = 0;
-
-      if (goal.target_type === 'absolute' && baselineValue !== targetValue) {
-        progressPercentage = ((baselineValue - currentValue) / (baselineValue - targetValue)) * 100;
-      } else if (goal.target_type === 'percentage' && baselineValue > 0) {
-        const reductionPct = ((baselineValue - currentValue) / baselineValue) * 100;
-        progressPercentage = (reductionPct / targetValue) * 100;
-      }
-
-      progressPercentage = Math.min(100, Math.max(0, roundTo(progressPercentage, 2)));
-
-      let status = goal.status;
-      if (progressPercentage >= 100) status = 'achieved';
-      else if (progressPercentage >= 70) status = 'on_track';
-      else if (progressPercentage >= 40) status = 'at_risk';
-      else if (progressPercentage > 0) status = 'behind';
+      const currentEmissions = await emissionsForGoal(projectId, goal);
+      const { currentValue, progressPercentage } = goalProgress(goal, currentEmissions);
+      const status = goalStatus(progressPercentage, goal.status);
 
       await db.query(
         `UPDATE esg_goals SET current_value = $1, progress_percentage = $2, status = $3, updated_at = NOW() WHERE id = $4`,

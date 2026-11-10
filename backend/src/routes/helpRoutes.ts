@@ -1,6 +1,21 @@
 import { Router, Request, Response } from 'express';
+import { config } from '../config';
 
 const router = Router();
+
+function withDemoGate<T extends Record<string, any>>(docs: T): T {
+  if (config.isDevelopment || config.isTest) return docs;
+  const { demoAccounts: _omit, ...rest } = docs as any;
+  return {
+    ...rest,
+    demoAccounts: undefined,
+    quickStart: {
+      step1: 'POST /api/v1/auth/login with your credentials',
+      step2: 'GET /api/v1/projects to list projects',
+      step3: 'Use authenticated endpoints with Bearer token',
+    },
+  } as T;
+}
 
 // =============================================================================
 // API HELP ENDPOINT - Documentation & Demo Instructions
@@ -167,11 +182,15 @@ router.get('/', (req: Request, res: Response) => {
 
 // Full documentation
 router.get('/help', (req: Request, res: Response) => {
-  res.json({ success: true, data: apiDocumentation });
+  res.json({ success: true, data: withDemoGate(apiDocumentation) });
 });
 
-// Demo quick start guide
+// Demo quick start guide — credentials only in development/test
 router.get('/help/demo', (req: Request, res: Response) => {
+  if (!config.isDevelopment && !config.isTest) {
+    res.status(404).json({ success: false, error: 'Demo guide is not available in this environment' });
+    return;
+  }
   res.json({
     success: true,
     data: {
@@ -228,7 +247,8 @@ router.get('/help/demo', (req: Request, res: Response) => {
 
 // Endpoint-specific help
 router.get('/help/auth', (req: Request, res: Response) => {
-  res.json({ success: true, data: { section: 'Authentication', endpoints: apiDocumentation.endpoints.auth, demo: apiDocumentation.demoAccounts } });
+  const demo = (config.isDevelopment || config.isTest) ? apiDocumentation.demoAccounts : undefined;
+  res.json({ success: true, data: { section: 'Authentication', endpoints: apiDocumentation.endpoints.auth, demo } });
 });
 
 router.get('/help/projects', (req: Request, res: Response) => {

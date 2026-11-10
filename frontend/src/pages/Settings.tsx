@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from '@/lib/motion';
 import {
   Settings as SettingsIcon,
@@ -21,6 +22,9 @@ import {
   RefreshCw,
   AlertTriangle,
   CheckCircle,
+  Users,
+  Copy,
+  KeyRound,
 } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -29,7 +33,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { Badge } from '@/components/ui/Badge';
 import { useThemeStore, type ThemeMode, type AccentColor } from '@/store/themeStore';
 import { useAppStore } from '@/store/appStore';
-import { authApi } from '@/lib/api';
+import { authApi, projectsApi, type ProjectMember } from '@/lib/api';
 
 const container = {
   hidden: { opacity: 0 },
@@ -59,6 +63,327 @@ const themeModes: { value: ThemeMode; name: string; icon: React.ElementType }[] 
   { value: 'dark', name: 'Dark', icon: Moon },
   { value: 'system', name: 'System', icon: Monitor },
 ];
+
+const PROJECT_ROLES = [
+  { value: 'viewer', label: 'Viewer' },
+  { value: 'editor', label: 'Editor' },
+  { value: 'auditor', label: 'Auditor' },
+  { value: 'director', label: 'Director' },
+];
+
+const canManageTeam = (globalRole: string | undefined, projectRole: string | null) => {
+  if (globalRole === 'owner' || globalRole === 'admin') return true;
+  return projectRole === 'owner' || projectRole === 'director' || projectRole === 'admin';
+};
+
+const MfaSecurityPanel: React.FC = () => {
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [mfaRecommended, setMfaRecommended] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [setupSecret, setSetupSecret] = useState<string | null>(null);
+  const [setupUrl, setSetupUrl] = useState<string | null>(null);
+  const [confirmCode, setConfirmCode] = useState('');
+  const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
+  const [disablePassword, setDisablePassword] = useState('');
+  const [disableCode, setDisableCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const refreshProfile = useCallback(async () => {
+    setLoadingProfile(true);
+    const res = await authApi.getCurrentUser();
+    if (res.success && res.data) {
+      setMfaEnabled(!!res.data.mfaEnabled);
+      setMfaRecommended(!!res.data.mfaRecommended);
+    }
+    setLoadingProfile(false);
+  }, []);
+
+  useEffect(() => {
+    refreshProfile();
+  }, [refreshProfile]);
+
+  const startSetup = async () => {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    const res = await authApi.setupMfa();
+    if (!res.success || !res.data) {
+      setError(res.error || 'Could not start MFA setup');
+    } else {
+      setSetupSecret(res.data.secret);
+      setSetupUrl(res.data.otpauthUrl);
+      setBackupCodes(null);
+    }
+    setBusy(false);
+  };
+
+  const confirmSetup = async () => {
+    if (!confirmCode.trim()) return;
+    setBusy(true);
+    setError(null);
+    const res = await authApi.confirmMfa(confirmCode.trim());
+    if (!res.success || !res.data) {
+      setError(res.error || 'Invalid code');
+    } else {
+      setMfaEnabled(true);
+      setBackupCodes(res.data.backupCodes);
+      setSetupSecret(null);
+      setSetupUrl(null);
+      setConfirmCode('');
+      setMessage('Two-factor authentication is now enabled.');
+    }
+    setBusy(false);
+  };
+
+  const disableMfa = async () => {
+    setBusy(true);
+    setError(null);
+    const res = await authApi.disableMfa(disablePassword, disableCode.trim());
+    if (!res.success) {
+      setError(res.error || 'Could not disable MFA');
+    } else {
+      setMfaEnabled(false);
+      setDisablePassword('');
+      setDisableCode('');
+      setMessage('MFA has been disabled.');
+      setBackupCodes(null);
+    }
+    setBusy(false);
+  };
+
+  const regenerateCodes = async () => {
+    setBusy(true);
+    setError(null);
+    const res = await authApi.regenerateBackupCodes();
+    if (!res.success || !res.data) {
+      setError(res.error || 'Could not regenerate backup codes. Sign in again with MFA if needed.');
+    } else {
+      setBackupCodes(res.data.backupCodes);
+      setMessage('New backup codes generated. Previous codes no longer work.');
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Card variant="default">
+      <CardHeader
+        title="Two-factor authentication"
+        subtitle="Protect your account with an authenticator app"
+        action={
+          mfaEnabled ? (
+            <Badge variant="success">Enabled</Badge>
+          ) : mfaRecommended ? (
+            <Badge variant="warning">Recommended for your role</Badge>
+          ) : (
+            <Badge variant="default">Off</Badge>
+          )
+        }
+      />
+      {loadingProfile && <p className="text-sm text-earth-500 mt-4">Loading security status…</p>}
+      {!loadingProfile && (
+        <div className="space-y-4 mt-4">
+          {error && <p role="alert" className="text-sm text-error-600">{error}</p>}
+          {message && <p className="text-sm text-sustain-700">{message}</p>}
+
+          {!mfaEnabled && !setupSecret && (
+            <Button variant="primary" onClick={startSetup} disabled={busy}>
+              <KeyRound className="w-4 h-4 mr-2" />
+              Set up authenticator
+            </Button>
+          )}
+
+          {setupSecret && (
+            <div className="rounded-xl border border-grass-200 dark:border-earth-700 p-4 space-y-3">
+              <p className="text-sm text-earth-600 dark:text-earth-300">
+                Scan this key in Google Authenticator, Microsoft Authenticator, or similar:
+              </p>
+              <code className="block text-xs break-all bg-earth-50 dark:bg-earth-800 p-2 rounded-lg">{setupSecret}</code>
+              {setupUrl && (
+                <a href={setupUrl} className="text-sm text-grass-600 hover:underline break-all" target="_blank" rel="noreferrer">
+                  Open otpauth link
+                </a>
+              )}
+              <Input
+                label="6-digit verification code"
+                value={confirmCode}
+                onChange={(e) => setConfirmCode(e.target.value)}
+                placeholder="000000"
+              />
+              <Button variant="primary" onClick={confirmSetup} disabled={busy || !confirmCode.trim()}>
+                Confirm and enable MFA
+              </Button>
+            </div>
+          )}
+
+          {mfaEnabled && (
+            <div className="space-y-4">
+              <Button variant="outline" size="sm" onClick={regenerateCodes} disabled={busy}>
+                Regenerate backup codes
+              </Button>
+              <div className="grid max-w-md gap-3 pt-2 border-t border-grass-100 dark:border-earth-700">
+                <p className="text-sm font-medium text-earth-700 dark:text-earth-200">Disable MFA</p>
+                <Input label="Current password" type="password" value={disablePassword} onChange={(e) => setDisablePassword(e.target.value)} />
+                <Input label="Authenticator or backup code" value={disableCode} onChange={(e) => setDisableCode(e.target.value)} />
+                <Button variant="outline" onClick={disableMfa} disabled={busy}>
+                  Turn off two-factor
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {backupCodes && backupCodes.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 p-4">
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-100">Save these backup codes now</p>
+              <p className="text-xs text-amber-800 dark:text-amber-200 mt-1">Each code works once. Store them somewhere safe.</p>
+              <ul className="mt-3 grid grid-cols-2 gap-2 font-mono text-sm">
+                {backupCodes.map((code) => (
+                  <li key={code} className="bg-white dark:bg-earth-800 rounded px-2 py-1">{code}</li>
+                ))}
+              </ul>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => navigator.clipboard.writeText(backupCodes.join('\n'))}
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Copy all
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+};
+
+const TeamPanel: React.FC = () => {
+  const { user, currentProject } = useAppStore();
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [projectRole, setProjectRole] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('viewer');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const manage = canManageTeam(user?.role, projectRole);
+
+  const loadMembers = useCallback(async () => {
+    if (!currentProject?.id) {
+      setMembers([]);
+      setProjectRole(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const res = await projectsApi.getMembers(currentProject.id);
+    if (!res.success) {
+      setError(res.error || 'Could not load team members');
+      setMembers([]);
+    } else {
+      const list = Array.isArray(res.data) ? res.data : [];
+      setMembers(list);
+      const self = list.find((m) => m.id === user?.id);
+      setProjectRole(self?.role ?? null);
+    }
+    setLoading(false);
+  }, [currentProject?.id, user?.id]);
+
+  useEffect(() => {
+    loadMembers();
+  }, [loadMembers]);
+
+  const invite = async () => {
+    if (!currentProject?.id || !inviteEmail.trim()) return;
+    setLoading(true);
+    setError(null);
+    const res = await projectsApi.addMember(currentProject.id, { email: inviteEmail.trim(), role: inviteRole });
+    if (!res.success) setError(res.error || 'Invite failed');
+    else {
+      setInviteEmail('');
+      await loadMembers();
+    }
+    setLoading(false);
+  };
+
+  const updateRole = async (memberId: string, role: string) => {
+    if (!currentProject?.id) return;
+    setError(null);
+    const res = await projectsApi.updateMember(currentProject.id, memberId, { role });
+    if (!res.success) setError(res.error || 'Could not update role');
+    else await loadMembers();
+  };
+
+  const remove = async (memberId: string) => {
+    if (!currentProject?.id || !confirm('Remove this member from the project?')) return;
+    const res = await projectsApi.removeMember(currentProject.id, memberId);
+    if (!res.success) setError(res.error || 'Could not remove member');
+    else await loadMembers();
+  };
+
+  return (
+    <Card variant="default">
+      <CardHeader
+        title="Project team"
+        subtitle={currentProject ? `Members for ${currentProject.name}` : 'Select a project in the header to manage its team'}
+        action={<Users className="w-5 h-5 text-earth-400" />}
+      />
+      {error && <p role="alert" className="text-sm text-error-600 mt-4">{error}</p>}
+      {!currentProject && (
+        <p className="text-sm text-earth-500 mt-4">No project selected.</p>
+      )}
+      {currentProject && (
+        <div className="mt-4 space-y-4">
+          {manage && (
+            <div className="grid md:grid-cols-3 gap-3 items-end">
+              <Input label="Email" type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="colleague@company.com" />
+              <Select label="Role" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} options={PROJECT_ROLES} />
+              <Button variant="primary" onClick={invite} disabled={loading || !inviteEmail.trim()}>
+                Invite member
+              </Button>
+            </div>
+          )}
+          {!manage && (
+            <p className="text-sm text-earth-500">You can view members. Only directors and owners can invite or change roles.</p>
+          )}
+          {loading && <p className="text-sm text-earth-500">Loading members…</p>}
+          <ul className="divide-y divide-grass-100 dark:divide-earth-700">
+            {members.map((member) => (
+              <li key={member.id} className="py-3 flex flex-wrap items-center gap-3 justify-between">
+                <div>
+                  <p className="font-medium text-earth-800 dark:text-earth-100">{member.name}</p>
+                  <p className="text-sm text-earth-500">{member.email}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {manage && member.id !== user?.id && member.role !== 'owner' && member.role !== 'admin' ? (
+                    <>
+                      <Select
+                        value={member.role}
+                        onChange={(e) => updateRole(member.id, e.target.value)}
+                        options={PROJECT_ROLES}
+                        className="min-w-[8rem]"
+                      />
+                      <Button variant="outline" size="sm" onClick={() => remove(member.id)}>
+                        Remove
+                      </Button>
+                    </>
+                  ) : (
+                    <Badge variant="grass">{member.role}</Badge>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+          {!loading && members.length === 0 && (
+            <p className="text-sm text-earth-500">No members listed for this project.</p>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+};
 
 const PasswordForm: React.FC = () => {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -91,7 +416,11 @@ const PasswordForm: React.FC = () => {
   );
 };
 
+const settingsTabIds = ['appearance', 'profile', 'notifications', 'security', 'team', 'data', 'language', 'shortcuts'] as const;
+
 export const Settings: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('appearance');
   const [clearingData, setClearingData] = useState(false);
   const [clearSuccess, setClearSuccess] = useState(false);
@@ -157,6 +486,20 @@ export const Settings: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const segment = location.pathname.replace(/^\/settings\/?/, '').split('/')[0];
+    if (segment && (settingsTabIds as readonly string[]).includes(segment)) {
+      setActiveTab(segment);
+    } else if (location.pathname === '/settings' || location.pathname === '/settings/') {
+      setActiveTab('appearance');
+    }
+  }, [location.pathname]);
+
+  const goToTab = (tabId: string) => {
+    setActiveTab(tabId);
+    navigate(tabId === 'appearance' ? '/settings' : `/settings/${tabId}`);
+  };
+
   // Apply theme class to document
   useEffect(() => {
     const root = document.documentElement;
@@ -199,6 +542,7 @@ export const Settings: React.FC = () => {
                 { id: 'profile', name: 'Profile', icon: User },
                 { id: 'notifications', name: 'Notifications', icon: Bell },
                 { id: 'security', name: 'Security', icon: Shield },
+                { id: 'team', name: 'Team', icon: Users },
                 { id: 'data', name: 'Data & Export', icon: Database },
                 { id: 'language', name: 'Language & Region', icon: Globe },
                 { id: 'shortcuts', name: 'Keyboard Shortcuts', icon: Keyboard },
@@ -207,7 +551,7 @@ export const Settings: React.FC = () => {
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => goToTab(tab.id)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                       activeTab === tab.id
                         ? 'bg-grass-100 dark:bg-earth-700 text-grass-700 dark:text-grass-400'
@@ -512,7 +856,22 @@ export const Settings: React.FC = () => {
               </motion.div>
             )}
 
-            {activeTab === 'security' && <PasswordForm />}
+            {activeTab === 'security' && (
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="space-y-6"
+              >
+                <MfaSecurityPanel />
+                <PasswordForm />
+              </motion.div>
+            )}
+
+            {activeTab === 'team' && (
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+                <TeamPanel />
+              </motion.div>
+            )}
             {activeTab === 'shortcuts' && (
               <Card>
                 <p className="text-sm text-earth-600 dark:text-earth-300">

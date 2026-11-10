@@ -69,6 +69,385 @@ const LoadingSpinner: React.FC<{ className?: string }> = ({ className }) => (
 
 type AuthMode = 'login' | 'register';
 
+type LoginFormData = {
+  email: string;
+  password: string;
+  name: string;
+  company: string;
+  confirmPassword: string;
+};
+
+function fieldClass(invalid: boolean, extra = ''): string {
+  return cn(
+    'w-full px-4 py-2.5 rounded-lg border bg-white text-gray-900',
+    'focus:outline-none focus:ring-2 focus:ring-[#0078D4] focus:border-transparent',
+    'transition-all placeholder:text-gray-400',
+    invalid ? 'border-red-300' : 'border-gray-300',
+    extra
+  );
+}
+
+function submitLabel(isLoading: boolean, mode: AuthMode): string {
+  if (isLoading) return mode === 'register' ? 'Creating account...' : 'Signing in...';
+  return mode === 'register' ? 'Create Account' : 'Sign In';
+}
+
+function authCopy(mfaStep: boolean, mode: AuthMode) {
+  if (mfaStep) {
+    return {
+      title: 'Two-step verification',
+      subtitle: 'Enter the code from your authenticator app or a backup code',
+    };
+  }
+  if (mode === 'login') {
+    return { title: 'Welcome back', subtitle: 'Sign in to access your sustainability dashboard' };
+  }
+  return { title: 'Get started', subtitle: 'Create an account to start tracking emissions' };
+}
+
+async function registerAccount(formData: LoginFormData) {
+  const response = await authApi.register({
+    email: formData.email,
+    password: formData.password,
+    name: formData.name,
+    company: formData.company || undefined,
+  });
+  if (response.success && response.data) return { ok: true as const };
+  return { ok: false as const, error: response.error || 'Registration failed. Please try again.' };
+}
+
+async function loginAccount(formData: LoginFormData) {
+  const response = await authApi.login({
+    email: formData.email,
+    password: formData.password,
+  });
+  if (!(response.success && response.data)) {
+    return { kind: 'error' as const, error: response.error || 'Invalid email or password' };
+  }
+  const data = response.data;
+  if ('mfaRequired' in data && data.mfaRequired) {
+    return { kind: 'mfa' as const, mfaToken: data.mfaToken };
+  }
+  if ('token' in data && data.token) {
+    return {
+      kind: 'session' as const,
+      token: data.token,
+      refreshToken: data.refreshToken,
+      user: data.user,
+    };
+  }
+  return { kind: 'error' as const, error: 'Unexpected login response' };
+}
+
+function AuthStatusBanner({ status }: Readonly<{ status: 'checking' | 'online' | 'offline' }>) {
+  if (status === 'online') return null;
+  const checking = status === 'checking';
+  return (
+    <div className={cn(
+      'mb-6 p-4 rounded-lg flex items-center gap-3',
+      checking ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'
+    )}>
+      {checking ? (
+        <>
+          <LoadingSpinner className="w-5 h-5" />
+          <span>Connecting to server...</span>
+        </>
+      ) : (
+        <>
+          <AlertIcon className="w-5 h-5" />
+          <div>
+            <p className="font-medium">Server Offline</p>
+            <p className="text-sm opacity-80">Please start the backend server to continue.</p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function AuthModeTabs({ mode, onSwitch }: Readonly<{ mode: AuthMode; onSwitch: (mode: AuthMode) => void }>) {
+  return (
+    <div className="flex border-b border-gray-200 mb-6">
+      <button
+        onClick={() => onSwitch('login')}
+        className={cn(
+          'flex-1 pb-3 text-sm font-medium transition-colors relative',
+          mode === 'login' ? 'text-[#0078D4]' : 'text-gray-500 hover:text-gray-700'
+        )}
+      >
+        Sign In
+        {mode === 'login' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0078D4]" />}
+      </button>
+      <button
+        onClick={() => onSwitch('register')}
+        className={cn(
+          'flex-1 pb-3 text-sm font-medium transition-colors relative',
+          mode === 'register' ? 'text-[#0078D4]' : 'text-gray-500 hover:text-gray-700'
+        )}
+      >
+        Create Account
+        {mode === 'register' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0078D4]" />}
+      </button>
+    </div>
+  );
+}
+
+function AuthMessages({ success, formError }: Readonly<{ success: string | null; formError?: string }>) {
+  return (
+    <>
+      {success && (
+        <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm flex items-center gap-2">
+          <CheckIcon className="w-5 h-5" />
+          {success}
+        </div>
+      )}
+      {formError && (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-center gap-2">
+          <AlertIcon className="w-5 h-5" />
+          {formError}
+        </div>
+      )}
+    </>
+  );
+}
+
+function PasswordInput({
+  id,
+  name,
+  value,
+  onChange,
+  invalid,
+  disabled,
+  shown,
+  onToggle,
+}: Readonly<{
+  id: string;
+  name: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  invalid: boolean;
+  disabled: boolean;
+  shown: boolean;
+  onToggle: () => void;
+}>) {
+  return (
+    <div className="relative">
+      <input
+        id={id}
+        type={shown ? 'text' : 'password'}
+        name={name}
+        value={value}
+        onChange={onChange}
+        className={fieldClass(invalid, 'pr-12')}
+        placeholder="••••••••"
+        disabled={disabled}
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+      >
+        {shown ? <EyeOffIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
+      </button>
+    </div>
+  );
+}
+
+function MfaForm({
+  code,
+  error,
+  isLoading,
+  onChange,
+  onSubmit,
+  onBack,
+}: Readonly<{
+  code: string;
+  error?: string;
+  isLoading: boolean;
+  onChange: (value: string) => void;
+  onSubmit: (e: React.SubmitEvent) => void;
+  onBack: () => void;
+}>) {
+  return (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <div>
+        <label htmlFor="mfa-code" className="block text-sm font-medium text-gray-700 mb-1.5">Verification code</label>
+        <input
+          id="mfa-code"
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          value={code}
+          onChange={(e) => onChange(e.target.value)}
+          className={cn(
+            'w-full px-4 py-2.5 rounded-lg border bg-white text-gray-900 text-center tracking-widest',
+            'focus:outline-none focus:ring-2 focus:ring-[#0078D4] focus:border-transparent',
+            error ? 'border-red-300' : 'border-gray-300'
+          )}
+          placeholder="000000"
+          disabled={isLoading}
+          maxLength={32}
+        />
+        {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+      </div>
+      <button
+        type="submit"
+        disabled={isLoading}
+        className={cn(
+          'w-full py-3 px-4 rounded-lg font-semibold text-white transition-all',
+          'bg-[#0078D4] hover:bg-[#106EBE] disabled:opacity-50',
+          'flex items-center justify-center gap-2'
+        )}
+      >
+        {isLoading ? (
+          <>
+            <LoadingSpinner className="w-5 h-5" />
+            <span>Verifying…</span>
+          </>
+        ) : (
+          <span>Verify &amp; sign in</span>
+        )}
+      </button>
+      <button type="button" onClick={onBack} className="w-full text-sm text-gray-500 hover:text-gray-700">
+        Back to sign in
+      </button>
+    </form>
+  );
+}
+
+function CredentialsForm({
+  mode,
+  formData,
+  errors,
+  isLoading,
+  backendOffline,
+  showPassword,
+  showConfirmPassword,
+  onChange,
+  onTogglePassword,
+  onToggleConfirm,
+  onSubmit,
+}: Readonly<{
+  mode: AuthMode;
+  formData: LoginFormData;
+  errors: Record<string, string>;
+  isLoading: boolean;
+  backendOffline: boolean;
+  showPassword: boolean;
+  showConfirmPassword: boolean;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onTogglePassword: () => void;
+  onToggleConfirm: () => void;
+  onSubmit: (e: React.SubmitEvent) => void;
+}>) {
+  const register = mode === 'register';
+  return (
+    <form onSubmit={onSubmit} className="space-y-4">
+      {register && (
+        <div>
+          <label htmlFor="login-name" className="block text-sm font-medium text-gray-700 mb-1.5">
+            Full Name <span className="text-red-500">*</span>
+          </label>
+          <input
+            id="login-name"
+            type="text"
+            name="name"
+            value={formData.name}
+            onChange={onChange}
+            className={fieldClass(Boolean(errors.name))}
+            placeholder="John Doe"
+            disabled={isLoading}
+          />
+          {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
+        </div>
+      )}
+      <div>
+        <label htmlFor="login-email" className="block text-sm font-medium text-gray-700 mb-1.5">
+          Work Email <span className="text-red-500">*</span>
+        </label>
+        <input
+          id="login-email"
+          type="email"
+          name="email"
+          value={formData.email}
+          onChange={onChange}
+          className={fieldClass(Boolean(errors.email))}
+          placeholder="you@company.com"
+          disabled={isLoading}
+        />
+        {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
+      </div>
+      {register && (
+        <div>
+          <label htmlFor="login-company" className="block text-sm font-medium text-gray-700 mb-1.5">Organization</label>
+          <input
+            id="login-company"
+            type="text"
+            name="company"
+            value={formData.company}
+            onChange={onChange}
+            className={cn(
+              'w-full px-4 py-2.5 rounded-lg border bg-white text-gray-900',
+              'focus:outline-none focus:ring-2 focus:ring-[#0078D4] focus:border-transparent',
+              'transition-all placeholder:text-gray-400 border-gray-300'
+            )}
+            placeholder="Acme Corporation"
+            disabled={isLoading}
+          />
+        </div>
+      )}
+      <div>
+        <label htmlFor="login-password" className="block text-sm font-medium text-gray-700 mb-1.5">
+          Password <span className="text-red-500">*</span>
+        </label>
+        <PasswordInput
+          id="login-password"
+          name="password"
+          value={formData.password}
+          onChange={onChange}
+          invalid={Boolean(errors.password)}
+          disabled={isLoading}
+          shown={showPassword}
+          onToggle={onTogglePassword}
+        />
+        {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
+      </div>
+      {register && (
+        <div>
+          <label htmlFor="login-confirm" className="block text-sm font-medium text-gray-700 mb-1.5">
+            Confirm Password <span className="text-red-500">*</span>
+          </label>
+          <PasswordInput
+            id="login-confirm"
+            name="confirmPassword"
+            value={formData.confirmPassword}
+            onChange={onChange}
+            invalid={Boolean(errors.confirmPassword)}
+            disabled={isLoading}
+            shown={showConfirmPassword}
+            onToggle={onToggleConfirm}
+          />
+          {errors.confirmPassword && <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>}
+        </div>
+      )}
+      <button
+        type="submit"
+        disabled={isLoading || backendOffline}
+        className={cn(
+          'w-full py-3 px-4 rounded-lg font-semibold text-white transition-all mt-6',
+          'bg-[#0078D4] hover:bg-[#106EBE]',
+          'focus:outline-none focus:ring-2 focus:ring-[#0078D4] focus:ring-offset-2',
+          'disabled:opacity-50 disabled:cursor-not-allowed',
+          'flex items-center justify-center gap-2'
+        )}
+      >
+        {isLoading && <LoadingSpinner className="w-5 h-5" />}
+        <span>{submitLabel(isLoading, mode)}</span>
+      </button>
+    </form>
+  );
+}
+
 export const Login: React.FC = () => {
   const navigate = useNavigate();
   const { setUser, setToken, setRefreshToken, setLoading, isLoading } = useAppStore();
@@ -88,6 +467,26 @@ export const Login: React.FC = () => {
   
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [mfaStep, setMfaStep] = useState(false);
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+
+  const storeAuthSession = (
+    token: string,
+    refreshToken: string | undefined,
+    user: { id: string; email: string; name: string; role: string; company?: string | null }
+  ) => {
+    setToken(token);
+    setRefreshToken(refreshToken || null);
+    setUser({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      organization: user.company || undefined,
+    });
+    navigate('/dashboard');
+  };
 
   // Check backend health on mount
   useEffect(() => {
@@ -139,62 +538,45 @@ export const Login: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const finishRegistration = async () => {
+    const result = await registerAccount(formData);
+    if (result.ok) {
+      setSuccessMessage('Account created successfully! You can now sign in.');
+      setMode('login');
+      setFormData(prev => ({ ...prev, password: '', confirmPassword: '' }));
+      return;
+    }
+    setErrors({ form: result.error });
+  };
+
+  const finishLogin = async () => {
+    const result = await loginAccount(formData);
+    if (result.kind === 'mfa') {
+      setMfaToken(result.mfaToken);
+      setMfaStep(true);
+      setMfaCode('');
+      return;
+    }
+    if (result.kind === 'session') {
+      storeAuthSession(result.token, result.refreshToken, result.user);
+      return;
+    }
+    setErrors({ form: result.error });
+  };
+
+  const handleSubmit = async (e: React.SubmitEvent) => {
     e.preventDefault();
-    
     if (!validateForm()) return;
-    
     if (backendStatus === 'offline') {
       setErrors({ form: 'Backend server is offline. Please ensure the server is running.' });
       return;
     }
-    
     setLoading(true);
     setErrors({});
     setSuccessMessage(null);
-    
     try {
-      let response;
-      
-      if (mode === 'register') {
-        response = await authApi.register({
-          email: formData.email,
-          password: formData.password,
-          name: formData.name,
-          company: formData.company || undefined,
-        });
-        
-        if (response.success && response.data) {
-          setSuccessMessage('Account created successfully! You can now sign in.');
-          setMode('login');
-          setFormData(prev => ({ ...prev, password: '', confirmPassword: '' }));
-        } else {
-          setErrors({ form: response.error || 'Registration failed. Please try again.' });
-        }
-      } else {
-        response = await authApi.login({
-          email: formData.email,
-          password: formData.password,
-        });
-        
-        if (response.success && response.data) {
-          // Update app state - setToken will trigger Zustand persist middleware
-          // which will automatically save to localStorage
-          setToken(response.data.token);
-          setRefreshToken(response.data.refreshToken || null);
-          setUser({
-            id: response.data.user.id,
-            email: response.data.user.email,
-            name: response.data.user.name,
-            role: response.data.user.role,
-            organization: response.data.user.company || undefined,
-          });
-          
-          navigate('/dashboard');
-        } else {
-          setErrors({ form: response.error || 'Invalid email or password' });
-        }
-      }
+      if (mode === 'register') await finishRegistration();
+      else await finishLogin();
     } catch (err) {
       setErrors({ form: err instanceof Error ? err.message : 'An error occurred. Please try again.' });
     } finally {
@@ -202,8 +584,33 @@ export const Login: React.FC = () => {
     }
   };
 
+  const handleMfaSubmit = async (e: React.SubmitEvent) => {
+    e.preventDefault();
+    if (!mfaToken || !mfaCode.trim()) {
+      setErrors({ mfaCode: 'Enter your 6-digit code or a backup code' });
+      return;
+    }
+    setLoading(true);
+    setErrors({});
+    try {
+      const response = await authApi.verifyMfa(mfaToken, mfaCode.trim());
+      if (response.success && response.data?.token) {
+        storeAuthSession(response.data.token, response.data.refreshToken, response.data.user);
+      } else {
+        setErrors({ form: response.error || 'Invalid verification code' });
+      }
+    } catch (err) {
+      setErrors({ form: err instanceof Error ? err.message : 'Verification failed' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const switchMode = (newMode: AuthMode) => {
     setMode(newMode);
+    setMfaStep(false);
+    setMfaToken(null);
+    setMfaCode('');
     setErrors({});
     setSuccessMessage(null);
     setFormData({
@@ -285,265 +692,47 @@ export const Login: React.FC = () => {
             </div>
           </div>
           
-          {/* Backend Status */}
-          {backendStatus !== 'online' && (
-            <div className={cn(
-              "mb-6 p-4 rounded-lg flex items-center gap-3",
-              backendStatus === 'checking' ? "bg-blue-50 text-blue-700" : "bg-red-50 text-red-700"
-            )}>
-              {backendStatus === 'checking' ? (
-                <>
-                  <LoadingSpinner className="w-5 h-5" />
-                  <span>Connecting to server...</span>
-                </>
-              ) : (
-                <>
-                  <AlertIcon className="w-5 h-5" />
-                  <div>
-                    <p className="font-medium">Server Offline</p>
-                    <p className="text-sm opacity-80">Please start the backend server to continue.</p>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-          
-          {/* Auth Card */}
+          <AuthStatusBanner status={backendStatus} />
+
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8">
-            {/* Tabs */}
-            <div className="flex border-b border-gray-200 mb-6">
-              <button
-                onClick={() => switchMode('login')}
-                className={cn(
-                  "flex-1 pb-3 text-sm font-medium transition-colors relative",
-                  mode === 'login'
-                    ? "text-[#0078D4]"
-                    : "text-gray-500 hover:text-gray-700"
-                )}
-              >
-                Sign In
-                {mode === 'login' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0078D4]" />
-                )}
-              </button>
-              <button
-                onClick={() => switchMode('register')}
-                className={cn(
-                  "flex-1 pb-3 text-sm font-medium transition-colors relative",
-                  mode === 'register'
-                    ? "text-[#0078D4]"
-                    : "text-gray-500 hover:text-gray-700"
-                )}
-              >
-                Create Account
-                {mode === 'register' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0078D4]" />
-                )}
-              </button>
-            </div>
-            
-            {/* Header */}
+            {!mfaStep && <AuthModeTabs mode={mode} onSwitch={switchMode} />}
             <div className="mb-6">
-              <h2 className="text-2xl font-semibold text-gray-900">
-                {mode === 'login' ? 'Welcome back' : 'Get started'}
-              </h2>
-              <p className="text-gray-500 mt-1">
-                {mode === 'login'
-                  ? 'Sign in to access your sustainability dashboard'
-                  : 'Create an account to start tracking emissions'}
-              </p>
+              <h2 className="text-2xl font-semibold text-gray-900">{authCopy(mfaStep, mode).title}</h2>
+              <p className="text-gray-500 mt-1">{authCopy(mfaStep, mode).subtitle}</p>
             </div>
-            
-            {/* Success Message */}
-            {successMessage && (
-              <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm flex items-center gap-2">
-                <CheckIcon className="w-5 h-5" />
-                {successMessage}
-              </div>
+            <AuthMessages success={successMessage} formError={errors.form} />
+            {mfaStep ? (
+              <MfaForm
+                code={mfaCode}
+                error={errors.mfaCode}
+                isLoading={isLoading}
+                onChange={(value) => {
+                  setMfaCode(value);
+                  if (errors.mfaCode) setErrors((prev) => ({ ...prev, mfaCode: '' }));
+                }}
+                onSubmit={handleMfaSubmit}
+                onBack={() => {
+                  setMfaStep(false);
+                  setMfaToken(null);
+                  setMfaCode('');
+                  setErrors({});
+                }}
+              />
+            ) : (
+              <CredentialsForm
+                mode={mode}
+                formData={formData}
+                errors={errors}
+                isLoading={isLoading}
+                backendOffline={backendStatus === 'offline'}
+                showPassword={showPassword}
+                showConfirmPassword={showConfirmPassword}
+                onChange={handleInputChange}
+                onTogglePassword={() => setShowPassword(!showPassword)}
+                onToggleConfirm={() => setShowConfirmPassword(!showConfirmPassword)}
+                onSubmit={handleSubmit}
+              />
             )}
-            
-            {/* Error Message */}
-            {errors.form && (
-              <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-center gap-2">
-                <AlertIcon className="w-5 h-5" />
-                {errors.form}
-              </div>
-            )}
-            
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Name Field (Register only) */}
-              {mode === 'register' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Full Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className={cn(
-                      "w-full px-4 py-2.5 rounded-lg border bg-white text-gray-900",
-                      "focus:outline-none focus:ring-2 focus:ring-[#0078D4] focus:border-transparent",
-                      "transition-all placeholder:text-gray-400",
-                      errors.name ? "border-red-300" : "border-gray-300"
-                    )}
-                    placeholder="John Doe"
-                    disabled={isLoading}
-                  />
-                  {errors.name && (
-                    <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-                  )}
-                </div>
-              )}
-              
-              {/* Email Field */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Work Email <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  className={cn(
-                    "w-full px-4 py-2.5 rounded-lg border bg-white text-gray-900",
-                    "focus:outline-none focus:ring-2 focus:ring-[#0078D4] focus:border-transparent",
-                    "transition-all placeholder:text-gray-400",
-                    errors.email ? "border-red-300" : "border-gray-300"
-                  )}
-                  placeholder="you@company.com"
-                  disabled={isLoading}
-                />
-                {errors.email && (
-                  <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-                )}
-              </div>
-              
-              {/* Company Field (Register only) */}
-              {mode === 'register' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Organization
-                  </label>
-                  <input
-                    type="text"
-                    name="company"
-                    value={formData.company}
-                    onChange={handleInputChange}
-                    className={cn(
-                      "w-full px-4 py-2.5 rounded-lg border bg-white text-gray-900",
-                      "focus:outline-none focus:ring-2 focus:ring-[#0078D4] focus:border-transparent",
-                      "transition-all placeholder:text-gray-400 border-gray-300"
-                    )}
-                    placeholder="Acme Corporation"
-                    disabled={isLoading}
-                  />
-                </div>
-              )}
-              
-              {/* Password Field */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Password <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    name="password"
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    className={cn(
-                      "w-full px-4 py-2.5 pr-12 rounded-lg border bg-white text-gray-900",
-                      "focus:outline-none focus:ring-2 focus:ring-[#0078D4] focus:border-transparent",
-                      "transition-all placeholder:text-gray-400",
-                      errors.password ? "border-red-300" : "border-gray-300"
-                    )}
-                    placeholder="••••••••"
-                    disabled={isLoading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    {showPassword ? (
-                      <EyeOffIcon className="w-5 h-5" />
-                    ) : (
-                      <EyeIcon className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
-                {errors.password && (
-                  <p className="mt-1 text-sm text-red-600">{errors.password}</p>
-                )}
-              </div>
-              
-              {/* Confirm Password Field (Register only) */}
-              {mode === 'register' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Confirm Password <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      name="confirmPassword"
-                      value={formData.confirmPassword}
-                      onChange={handleInputChange}
-                      className={cn(
-                        "w-full px-4 py-2.5 pr-12 rounded-lg border bg-white text-gray-900",
-                        "focus:outline-none focus:ring-2 focus:ring-[#0078D4] focus:border-transparent",
-                        "transition-all placeholder:text-gray-400",
-                        errors.confirmPassword ? "border-red-300" : "border-gray-300"
-                      )}
-                      placeholder="••••••••"
-                      disabled={isLoading}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                      {showConfirmPassword ? (
-                        <EyeOffIcon className="w-5 h-5" />
-                      ) : (
-                        <EyeIcon className="w-5 h-5" />
-                      )}
-                    </button>
-                  </div>
-                  {errors.confirmPassword && (
-                    <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
-                  )}
-                </div>
-              )}
-              
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={isLoading || backendStatus === 'offline'}
-                className={cn(
-                  "w-full py-3 px-4 rounded-lg font-semibold text-white transition-all mt-6",
-                  "bg-[#0078D4] hover:bg-[#106EBE]",
-                  "focus:outline-none focus:ring-2 focus:ring-[#0078D4] focus:ring-offset-2",
-                  "disabled:opacity-50 disabled:cursor-not-allowed",
-                  "flex items-center justify-center gap-2"
-                )}
-              >
-                {isLoading ? (
-                  <>
-                    <LoadingSpinner className="w-5 h-5" />
-                    <span>{mode === 'register' ? 'Creating account...' : 'Signing in...'}</span>
-                  </>
-                ) : (
-                  <span>{mode === 'register' ? 'Create Account' : 'Sign In'}</span>
-                )}
-              </button>
-            </form>
-            
-            {/* Terms (Register only) */}
             {mode === 'register' && (
               <p className="mt-4 text-xs text-gray-500 text-center">
                 By creating an account, you agree to our{' '}
@@ -553,7 +742,7 @@ export const Login: React.FC = () => {
               </p>
             )}
           </div>
-          
+
           {/* Help Link */}
           <p className="mt-6 text-center text-sm text-gray-500">
             Need help?{' '}

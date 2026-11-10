@@ -137,6 +137,145 @@ function generateInsights(s1: number, s2: number, s3: number, total: number) {
   return insights;
 }
 
+type ActivityPoint = { name: string; scope: string; emissions: number };
+
+function readNumber(source: any, keys: string[]): number {
+  for (const key of keys) {
+    const value = source?.[key];
+    if (value !== undefined && value !== null) return Number(value);
+  }
+  return 0;
+}
+
+async function addProjectTotals(project: any, totals: { scope1: number; scope2: number; scope3: number }) {
+  try {
+    const totalsRes = await calculationsApi.getTotals(project.id);
+    const data = totalsRes.data?.totals || totalsRes.data;
+    if (!data) return;
+    totals.scope1 += readNumber(data, ['scope1', 'scope1Total', 'scope_1_total']);
+    totals.scope2 += readNumber(data, ['scope2', 'scope2Total', 'scope_2_total']);
+    totals.scope3 += readNumber(data, ['scope3', 'scope3Total', 'scope_3_total']);
+  } catch {
+    /* project may not have calculations yet */
+  }
+}
+
+async function addProjectActivities(project: any, allActivities: ActivityPoint[]) {
+  try {
+    const actRes = await activitiesApi.getByProject(project.id);
+    const activities = actRes.data?.activities || actRes.data || [];
+    if (!Array.isArray(activities)) return;
+    activities.forEach((activity: any) => {
+      const emissions = Number(activity.total_emissions_kg_co2e ?? activity.totalEmissions ?? activity.emissions ?? 0);
+      if (emissions > 0) allActivities.push({ name: activity.name, scope: activity.scope, emissions: emissions / 1000 });
+    });
+  } catch {
+    /* skip */
+  }
+}
+
+async function collectProjectEmissions(projects: any[]) {
+  const totals = { scope1: 0, scope2: 0, scope3: 0 };
+  const allActivities: ActivityPoint[] = [];
+  for (const project of projects) {
+    await addProjectTotals(project, totals);
+    await addProjectActivities(project, allActivities);
+  }
+  return { ...totals, allActivities };
+}
+
+function emissionView(s1: number, s2: number, s3: number, allActivities: ActivityPoint[]) {
+  const total = s1 + s2 + s3;
+  if (total <= 0) return null;
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const trend = monthNames.map((month, idx) => {
+    const factor = 0.85 + Math.sin(idx * 0.8) * 0.15;
+    const ms1 = parseFloat(((s1 / 12) * factor).toFixed(1));
+    const ms2 = parseFloat(((s2 / 12) * factor).toFixed(1));
+    const ms3 = parseFloat(((s3 / 12) * factor).toFixed(1));
+    return { month, scope1: ms1, scope2: ms2, scope3: ms3, total: parseFloat((ms1 + ms2 + ms3).toFixed(1)) };
+  });
+  const sources = [...allActivities]
+    .sort((a, b) => b.emissions - a.emissions)
+    .slice(0, 5)
+    .map((src) => ({
+      name: src.name,
+      emissions: parseFloat(src.emissions.toFixed(1)),
+      scope: scopeLabel(src.scope),
+      icon: getScopeIcon(src.scope),
+      percentage: Math.round((src.emissions / total) * 100),
+      color: getScopeColor(src.scope),
+    }));
+  const yourEm = parseFloat(total.toFixed(0));
+  const currentYear = new Date().getFullYear();
+  return {
+    scope: {
+      scope1: { value: parseFloat(s1.toFixed(1)), change: -3.5, label: 'Scope 1 (Direct)' },
+      scope2: { value: parseFloat(s2.toFixed(1)), change: -5.2, label: 'Scope 2 (Energy)' },
+      scope3: { value: parseFloat(s3.toFixed(1)), change: -2.1, label: 'Scope 3 (Value Chain)' },
+    },
+    trend,
+    sources,
+    benchmarks: [
+      { category: 'Manufacturing (Asia)', avgEmissions: Math.round(yourEm * 1.15), yourEmissions: yourEm, percentile: 75, trend: 'improving' },
+      { category: 'Industry Peers', avgEmissions: Math.round(yourEm * 1.07), yourEmissions: yourEm, percentile: 68, trend: 'stable' },
+      { category: 'Global Best Practice', avgEmissions: Math.round(yourEm * 0.65), yourEmissions: yourEm, percentile: 35, trend: 'improving' },
+      { category: 'Science-Based Target', avgEmissions: Math.round(yourEm * 0.77), yourEmissions: yourEm, percentile: 45, trend: 'needs attention' },
+    ],
+    yearly: [
+      { year: currentYear - 2, scope1: parseFloat((s1 * 1.08).toFixed(0)), scope2: parseFloat((s2 * 1.10).toFixed(0)), scope3: parseFloat((s3 * 1.07).toFixed(0)), total: parseFloat((total * 1.08).toFixed(0)) },
+      { year: currentYear - 1, scope1: parseFloat((s1 * 1.04).toFixed(0)), scope2: parseFloat((s2 * 1.05).toFixed(0)), scope3: parseFloat((s3 * 1.03).toFixed(0)), total: parseFloat((total * 1.04).toFixed(0)) },
+      { year: currentYear, scope1: parseFloat(s1.toFixed(0)), scope2: parseFloat(s2.toFixed(0)), scope3: parseFloat(s3.toFixed(0)), total: parseFloat(total.toFixed(0)) },
+    ],
+    insights: generateInsights(s1, s2, s3, total),
+  };
+}
+
+function goalStatusLabel(status: string): string {
+  if (status === 'completed' || status === 'achieved') return 'on-track';
+  if (status === 'not_started') return 'upcoming';
+  return status || 'upcoming';
+}
+
+function mapGoalTargets(goals: any[]) {
+  return goals
+    .filter((goal: any) => goal.category === 'emissions_reduction' || goal.target_value)
+    .slice(0, 4)
+    .map((goal: any) => ({
+      year: goal.target_year || goal.targetYear || new Date().getFullYear() + 1,
+      target: Number.parseFloat(goal.target_value ?? goal.targetValue ?? 0),
+      actual: goal.current_value ? Number.parseFloat(goal.current_value) : null,
+      status: goalStatusLabel(goal.status),
+      progress: Number.parseFloat(goal.progress || goal.current_progress || 0),
+    }));
+}
+
+function fallbackTargets(total: number) {
+  const year = new Date().getFullYear();
+  return [
+    { year, target: Number.parseFloat(total.toFixed(0)), actual: Number.parseFloat(total.toFixed(1)), status: 'on-track', progress: 100 },
+    { year: year + 1, target: Number.parseFloat((total * 0.9).toFixed(0)), actual: null, status: 'upcoming', progress: 0 },
+    { year: year + 5, target: Number.parseFloat((total * 0.6).toFixed(0)), actual: null, status: 'upcoming', progress: 0 },
+    { year: 2050, target: 0, actual: null, status: 'net-zero', progress: 0 },
+  ];
+}
+
+async function applyReductionTargets(
+  projectId: string | undefined,
+  total: number,
+  existingCount: number,
+  setTargets: (rows: any[]) => void
+) {
+  if (!projectId) return;
+  const goalsRes = await goalsApi.getAll(projectId);
+  const goals = goalsRes.data?.goals || goalsRes.data || [];
+  if (Array.isArray(goals) && goals.length > 0) {
+    const targets = mapGoalTargets(goals);
+    if (targets.length > 0) setTargets(targets);
+  }
+  if (existingCount === 0) setTargets(fallbackTargets(total));
+}
+
 export const Analytics: React.FC = () => {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<'overview' | 'trends' | 'benchmarks' | 'insights'>(
@@ -180,125 +319,22 @@ export const Analytics: React.FC = () => {
         ? safeProjects
         : safeProjects.filter((p: any) => p.id === selectedProject);
 
-      let totalScope1 = 0, totalScope2 = 0, totalScope3 = 0;
-
-      // Collect activities for top-sources derivation
-      const allActivities: Array<{ name: string; scope: string; emissions: number }> = [];
-
-      for (const proj of targetProjects) {
-        try {
-          const totalsRes = await calculationsApi.getTotals(proj.id);
-          const totals = totalsRes.data?.totals || totalsRes.data;
-          if (totals) {
-            totalScope1 += Number(totals.scope1 ?? totals.scope1Total ?? totals.scope_1_total ?? 0);
-            totalScope2 += Number(totals.scope2 ?? totals.scope2Total ?? totals.scope_2_total ?? 0);
-            totalScope3 += Number(totals.scope3 ?? totals.scope3Total ?? totals.scope_3_total ?? 0);
-          }
-        } catch { /* project may not have calculations yet */ }
-
-        // Fetch activities for this project
-        try {
-          const actRes = await activitiesApi.getByProject(proj.id);
-          const activities = actRes.data?.activities || actRes.data || [];
-          if (Array.isArray(activities)) {
-            activities.forEach((a: any) => {
-              const em = Number(a.total_emissions_kg_co2e ?? a.totalEmissions ?? a.emissions ?? 0);
-              if (em > 0) {
-                allActivities.push({ name: a.name, scope: a.scope, emissions: em / 1000 });
-              }
-            });
-          }
-        } catch { /* skip */ }
+      const collected = await collectProjectEmissions(targetProjects);
+      const s1 = collected.scope1 / 1000;
+      const s2 = collected.scope2 / 1000;
+      const s3 = collected.scope3 / 1000;
+      const view = emissionView(s1, s2, s3, collected.allActivities);
+      if (view) {
+        setEmissionsByScope(view.scope);
+        setMonthlyTrend(view.trend);
+        setTopEmissionSources(view.sources);
+        setBenchmarks(view.benchmarks);
+        setYearlyComparison(view.yearly);
+        setAiInsights(view.insights);
       }
 
-      // Backend returns kgCO2e → convert to tCO2e
-      const s1 = totalScope1 / 1000;
-      const s2 = totalScope2 / 1000;
-      const s3 = totalScope3 / 1000;
-      const total = s1 + s2 + s3;
-
-      if (total > 0) {
-        setEmissionsByScope({
-          scope1: { value: parseFloat(s1.toFixed(1)), change: -3.5, label: 'Scope 1 (Direct)' },
-          scope2: { value: parseFloat(s2.toFixed(1)), change: -5.2, label: 'Scope 2 (Energy)' },
-          scope3: { value: parseFloat(s3.toFixed(1)), change: -2.1, label: 'Scope 3 (Value Chain)' },
-        });
-
-        // Distribute annual totals across 12 months with seasonal variation
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const trend = monthNames.map((month, idx) => {
-          const factor = 0.85 + Math.sin(idx * 0.8) * 0.15;
-          const ms1 = parseFloat(((s1 / 12) * factor).toFixed(1));
-          const ms2 = parseFloat(((s2 / 12) * factor).toFixed(1));
-          const ms3 = parseFloat(((s3 / 12) * factor).toFixed(1));
-          return { month, scope1: ms1, scope2: ms2, scope3: ms3, total: parseFloat((ms1 + ms2 + ms3).toFixed(1)) };
-        });
-        setMonthlyTrend(trend);
-
-        // === Top Emission Sources – derived from activities ===
-        const sorted = [...allActivities].sort((a, b) => b.emissions - a.emissions).slice(0, 5);
-        const maxSrc = sorted[0]?.emissions || 1;
-        setTopEmissionSources(sorted.map((src) => ({
-          name: src.name,
-          emissions: parseFloat(src.emissions.toFixed(1)),
-          scope: scopeLabel(src.scope),
-          icon: getScopeIcon(src.scope),
-          percentage: Math.round((src.emissions / total) * 100),
-          color: getScopeColor(src.scope),
-        })));
-
-        // === Benchmarks – use actual emissions ===
-        const yourEm = parseFloat(total.toFixed(0));
-        setBenchmarks([
-          { category: 'Manufacturing (Asia)', avgEmissions: Math.round(yourEm * 1.15), yourEmissions: yourEm, percentile: 75, trend: 'improving' },
-          { category: 'Industry Peers', avgEmissions: Math.round(yourEm * 1.07), yourEmissions: yourEm, percentile: 68, trend: 'stable' },
-          { category: 'Global Best Practice', avgEmissions: Math.round(yourEm * 0.65), yourEmissions: yourEm, percentile: 35, trend: 'improving' },
-          { category: 'Science-Based Target', avgEmissions: Math.round(yourEm * 0.77), yourEmissions: yourEm, percentile: 45, trend: 'needs attention' },
-        ]);
-
-        // === Yearly Comparison – derive from current data ===
-        const currentYear = new Date().getFullYear();
-        setYearlyComparison([
-          { year: currentYear - 2, scope1: parseFloat((s1 * 1.08).toFixed(0)), scope2: parseFloat((s2 * 1.10).toFixed(0)), scope3: parseFloat((s3 * 1.07).toFixed(0)), total: parseFloat((total * 1.08).toFixed(0)) },
-          { year: currentYear - 1, scope1: parseFloat((s1 * 1.04).toFixed(0)), scope2: parseFloat((s2 * 1.05).toFixed(0)), scope3: parseFloat((s3 * 1.03).toFixed(0)), total: parseFloat((total * 1.04).toFixed(0)) },
-          { year: currentYear, scope1: parseFloat(s1.toFixed(0)), scope2: parseFloat(s2.toFixed(0)), scope3: parseFloat(s3.toFixed(0)), total: parseFloat(total.toFixed(0)) },
-        ]);
-
-        // === AI Insights – context-aware ===
-        setAiInsights(generateInsights(s1, s2, s3, total));
-      }
-
-      // === Reduction Targets – from ESG Goals ===
       try {
-        const firstProjectId = targetProjects[0]?.id;
-        if (firstProjectId) {
-          const goalsRes = await goalsApi.getAll(firstProjectId);
-          const goals = goalsRes.data?.goals || goalsRes.data || [];
-          if (Array.isArray(goals) && goals.length > 0) {
-            const targets = goals
-              .filter((g: any) => g.category === 'emissions_reduction' || g.target_value)
-              .slice(0, 4)
-              .map((g: any) => ({
-                year: g.target_year || g.targetYear || new Date().getFullYear() + 1,
-                target: parseFloat(g.target_value ?? g.targetValue ?? 0),
-                actual: g.current_value ? parseFloat(g.current_value) : null,
-                status: (g.status === 'completed' || g.status === 'achieved') ? 'on-track' :
-                  g.status === 'not_started' ? 'upcoming' : g.status || 'upcoming',
-                progress: parseFloat(g.progress || g.current_progress || 0),
-              }));
-            if (targets.length > 0) setReductionTargets(targets);
-          }
-          // Fallback if no goals found
-          if (reductionTargets.length === 0) {
-            const yr = new Date().getFullYear();
-            setReductionTargets([
-              { year: yr, target: parseFloat(total.toFixed(0)), actual: parseFloat(total.toFixed(1)), status: 'on-track', progress: 100 },
-              { year: yr + 1, target: parseFloat((total * 0.9).toFixed(0)), actual: null, status: 'upcoming', progress: 0 },
-              { year: yr + 5, target: parseFloat((total * 0.6).toFixed(0)), actual: null, status: 'upcoming', progress: 0 },
-              { year: 2050, target: 0, actual: null, status: 'net-zero', progress: 0 },
-            ]);
-          }
-        }
+        await applyReductionTargets(targetProjects[0]?.id, s1 + s2 + s3, reductionTargets.length, setReductionTargets);
       } catch { /* goals optional */ }
     } catch (err) {
       console.error('Failed to load analytics data:', err);

@@ -23,8 +23,11 @@ const envSchema = z.object({
   
   // Authentication
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
+  JWT_REFRESH_SECRET: z.string().min(32).optional(),
   JWT_EXPIRES_IN: z.string().default('24h'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+  MFA_ENCRYPTION_KEY: z.string().min(32).optional(),
+  TRUST_PROXY: z.string().default('1'),
   
   // SERPAPI
   SERPAPI_KEY: z.string().optional(),
@@ -98,9 +101,16 @@ export const config = {
   // Authentication
   jwt: {
     secret: env.JWT_SECRET,
+    refreshSecret: env.JWT_REFRESH_SECRET || `${env.JWT_SECRET}_refresh`,
     expiresIn: env.JWT_EXPIRES_IN,
     refreshExpiresIn: env.JWT_REFRESH_EXPIRES_IN,
   },
+
+  mfa: {
+    encryptionKey: env.MFA_ENCRYPTION_KEY || env.JWT_SECRET.slice(0, 32),
+  },
+
+  trustProxy: env.TRUST_PROXY === '1' || env.TRUST_PROXY === 'true',
   
   // SERPAPI
   serpapi: {

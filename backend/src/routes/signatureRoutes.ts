@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
-import { authenticate, authorizeSignature, authorizeProjectOwner } from '../middleware/auth';
+import { authenticate, authorizeSignature, authorizeProjectMember } from '../middleware/auth';
 import { validate, signReportSchema } from '../middleware/validation';
 import * as signatureController from '../controllers/signatureController';
 
@@ -26,7 +26,7 @@ router.get(
 // Get signatures for a project
 router.get(
   '/project/:projectId',
-  authorizeProjectOwner('projectId'),
+  authorizeProjectMember('viewer', 'projectId'),
   asyncHandler(signatureController.getProjectSignatures)
 );
 

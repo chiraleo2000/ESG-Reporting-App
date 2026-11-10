@@ -16,3 +16,4 @@ export { Calculations } from './Calculations';
 export { ESGGoals } from './ESGGoals';
 export { DataSources } from './DataSources';
 export { HelpGuide } from './HelpGuide';
+export { SecurityAlerts } from './SecurityAlerts';

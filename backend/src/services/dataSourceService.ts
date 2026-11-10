@@ -89,27 +89,114 @@ export async function createDataSource(
   return dataSource;
 }
 
-/**
- * Get all data sources for a project
- */
-export async function getDataSources(projectId: string): Promise<DataSourceConfig[]> {
-  const { rows } = await db.query(
-    `SELECT * FROM data_sources WHERE project_id = $1 ORDER BY created_at DESC`,
-    [projectId]
-  );
-  
-  return rows.map(formatDataSource);
+export interface DataSourceListOptions {
+  page?: number;
+  limit?: number;
+  type?: string;
+  enabled?: boolean;
+  search?: string;
+  status?: string;
 }
 
 /**
- * Get a single data source
+ * Redact secrets from connector config before returning to clients
+ */
+export function redactConfigSecrets(config: Record<string, any> | null | undefined): Record<string, any> {
+  if (!config || typeof config !== 'object') return {};
+  const secretKeys = [
+    'password', 'apiKey', 'api_key', 'token', 'secret', 'accessToken',
+    'privateKey', 'private_key', 'sshKey', 'ssh_key', 'clientSecret',
+  ];
+  const out: Record<string, any> = { ...config };
+  for (const key of Object.keys(out)) {
+    if (secretKeys.some((s) => key.toLowerCase().includes(s.toLowerCase()))) {
+      const val = String(out[key] ?? '');
+      out[key] = val.length > 4 ? `***${val.slice(-4)}` : '***';
+    }
+  }
+  return out;
+}
+
+/**
+ * Get all data sources for a project (paginated + filtered; secrets redacted)
+ */
+export async function getDataSources(
+  projectId: string,
+  options: DataSourceListOptions = {}
+): Promise<{ items: DataSourceConfig[]; total: number; page: number; limit: number }> {
+  const page = options.page || 1;
+  const limit = Math.min(options.limit || 20, 100);
+  const offset = (page - 1) * limit;
+
+  const params: any[] = [projectId];
+  let where = 'WHERE project_id = $1';
+  let idx = 2;
+
+  if (options.type) {
+    where += ` AND type = $${idx}`;
+    params.push(options.type);
+    idx++;
+  }
+  if (options.enabled !== undefined) {
+    where += ` AND enabled = $${idx}`;
+    params.push(options.enabled);
+    idx++;
+  }
+  if (options.status) {
+    where += ` AND last_sync_status = $${idx}`;
+    params.push(options.status);
+    idx++;
+  }
+  if (options.search) {
+    where += ` AND name ILIKE $${idx}`;
+    params.push(`%${options.search}%`);
+    idx++;
+  }
+
+  const countResult = await db.query(
+    `SELECT COUNT(*)::int AS total FROM data_sources ${where}`,
+    params
+  );
+  params.push(limit, offset);
+  const { rows } = await db.query(
+    `SELECT * FROM data_sources ${where}
+     ORDER BY created_at DESC
+     LIMIT $${idx} OFFSET $${idx + 1}`,
+    params
+  );
+
+  return {
+    items: rows.map((row) => {
+      const ds = formatDataSource(row);
+      return { ...ds, config: redactConfigSecrets(ds.config) };
+    }),
+    total: countResult.rows[0].total,
+    page,
+    limit,
+  };
+}
+
+/**
+ * Get a single data source (secrets redacted on read)
  */
 export async function getDataSource(id: string, projectId: string): Promise<DataSourceConfig | null> {
   const row = await db.queryOne(
     `SELECT * FROM data_sources WHERE id = $1 AND project_id = $2`,
     [id, projectId]
   );
-  
+  if (!row) return null;
+  const ds = formatDataSource(row);
+  return { ...ds, config: redactConfigSecrets(ds.config) };
+}
+
+/**
+ * Internal unredacted fetch for sync/connectors
+ */
+export async function getDataSourceRaw(id: string, projectId: string): Promise<DataSourceConfig | null> {
+  const row = await db.queryOne(
+    `SELECT * FROM data_sources WHERE id = $1 AND project_id = $2`,
+    [id, projectId]
+  );
   return row ? formatDataSource(row) : null;
 }
 
@@ -128,7 +215,7 @@ export async function updateDataSource(
     enabled: boolean;
   }>
 ): Promise<DataSourceConfig | null> {
-  const existing = await getDataSource(id, projectId);
+  const existing = await getDataSourceRaw(id, projectId);
   if (!existing) return null;
 
   const updates: string[] = [];
@@ -191,7 +278,7 @@ export async function updateDataSource(
     fields: Object.keys(data),
   }, projectId);
 
-  return updated;
+  return { ...updated, config: redactConfigSecrets(updated.config) };
 }
 
 /**
@@ -224,7 +311,7 @@ export async function triggerSync(
   projectId: string,
   userId: string
 ): Promise<ConnectorResult> {
-  const dataSource = await getDataSource(id, projectId);
+  const dataSource = await getDataSourceRaw(id, projectId);
   if (!dataSource) {
     return {
       success: false,

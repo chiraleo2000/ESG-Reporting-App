@@ -1,87 +1,85 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
-import { authenticate, authorizeProjectOwner } from '../middleware/auth';
-import { 
-  validate, 
-  createActivitySchema, 
+import {
+  authenticate,
+  authorizeProjectMember,
+  authorizeEntityProjectMember,
+  requireMfaCompleted,
+} from '../middleware/auth';
+import {
+  validate,
+  createActivitySchema,
   updateActivitySchema,
   activityFilterSchema,
-  paginationSchema 
+  paginationSchema,
 } from '../middleware/validation';
 import * as activityController from '../controllers/activityController';
 
 const router = Router();
 
-// All routes require authentication
 router.use(authenticate);
 
-// Create new activity (single or batch) - legacy route
 router.post(
   '/',
   validate(createActivitySchema),
   asyncHandler(activityController.createActivity)
 );
 
-// Create activity for a specific project
 router.post(
   '/project/:projectId',
-  authorizeProjectOwner('projectId'),
+  authorizeProjectMember('editor', 'projectId'),
   validate(createActivitySchema),
   asyncHandler(activityController.createActivityForProject)
 );
 
-// Batch create activities
 router.post(
   '/batch',
   asyncHandler(activityController.bulkCreateActivities)
 );
 
-// Get activities for a project
 router.get(
   '/project/:projectId',
-  authorizeProjectOwner('projectId'),
+  authorizeProjectMember('viewer', 'projectId'),
   validate(paginationSchema, 'query'),
   validate(activityFilterSchema, 'query'),
   asyncHandler(activityController.getActivities)
 );
 
-// Get single activity
+router.get(
+  '/project/:projectId/summary',
+  authorizeProjectMember('viewer', 'projectId'),
+  asyncHandler(activityController.getActivitySummary)
+);
+
+router.get(
+  '/project/:projectId/export',
+  authorizeProjectMember('auditor', 'projectId'),
+  requireMfaCompleted,
+  asyncHandler(activityController.exportActivities)
+);
+
 router.get(
   '/:id',
+  authorizeEntityProjectMember('activities', 'id', 'viewer'),
   asyncHandler(activityController.getActivity)
 );
 
-// Update activity
 router.put(
   '/:id',
+  authorizeEntityProjectMember('activities', 'id', 'editor'),
   validate(updateActivitySchema),
   asyncHandler(activityController.updateActivity)
 );
 
-// Delete activity
 router.delete(
   '/:id',
+  authorizeEntityProjectMember('activities', 'id', 'editor'),
   asyncHandler(activityController.deleteActivity)
 );
 
-// Batch delete activities
 router.post(
   '/batch-delete',
   asyncHandler(activityController.bulkDeleteActivities)
-);
-
-// Get activity summary by scope/category
-router.get(
-  '/project/:projectId/summary',
-  authorizeProjectOwner('projectId'),
-  asyncHandler(activityController.getActivitySummary)
-);
-
-// Export activities to CSV
-router.get(
-  '/project/:projectId/export',
-  authorizeProjectOwner('projectId'),
-  asyncHandler(activityController.exportActivities)
 );
 
 export default router;
